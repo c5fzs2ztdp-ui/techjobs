@@ -64,6 +64,27 @@ export const REGION_LABELS: Record<string, string> = {
   'judea-samaria': 'יהודה ושומרון',
 };
 
+export const CATEGORY_LABELS: Record<string, string> = {
+  software: 'Software',
+  'data-ai': 'Data & AI',
+  qa: 'QA',
+  devops: 'DevOps & Infrastructure',
+  security: 'Security',
+  product: 'Product',
+  design: 'Design',
+  sales: 'Sales',
+  marketing: 'Marketing',
+  hr: 'HR',
+  finance: 'Finance',
+  'operations-logistics': 'Operations & Logistics',
+  'customer-support': 'Customer Support',
+  'hardware-electronics': 'Hardware & Electronics',
+  'mechanical-manufacturing': 'Mechanical & Manufacturing',
+  management: 'Management',
+  admin: 'Admin',
+  other: 'Other',
+};
+
 export async function fetchJobsPayload(): Promise<JobsPayload> {
   const response = await fetch(JOBS_DATA_URL);
   if (!response.ok) {

@@ -5,7 +5,7 @@ import { MapPin, Briefcase, Bookmark, BookmarkCheck, ExternalLink, CheckCircle2,
 import { motion } from "framer-motion";
 import { usePostHog } from 'posthog-js/react';
 import CompanyLogo from "@/components/CompanyLogo";
-import { displayCity, type Job } from "./jobsData";
+import { displayCity, CATEGORY_LABELS, type Job } from "./jobsData";
 
 const seniorityColors: Record<string, string> = {
   intern: 'bg-green-50 text-green-700 border-green-200',
@@ -77,7 +77,7 @@ export default function JobCard({ job, onSave, isSaved, onApply, isApplied, inde
                       </Badge>
                     )}
                     <Badge variant="outline" className="bg-iris-50 text-iris-700 border-iris-200 text-xs capitalize">
-                      {job.job_category.replace(/-/g, ' ')}
+                      {CATEGORY_LABELS[job.job_category] || job.job_category.replace(/-/g, ' ')}
                     </Badge>
                     {job.employmentType && (
                       <Badge variant="outline" className="bg-copper-500/10 text-copper-600 border-copper-400/40 text-xs capitalize">

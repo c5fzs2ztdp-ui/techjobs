@@ -1,0 +1,73 @@
+import { test } from 'node:test';
+import assert from 'node:assert/strict';
+import { deriveJobCategory } from './convert_jobs.mjs';
+
+// Regression: Strauss screenshot cases - Hebrew titles must never default to software.
+test('strauss HR recruiting manager -> hr', () => {
+  assert.equal(deriveJobCategory('מנהלת צוות גיוס אזור הצפון - החלפה לחל"ד', 'משאבי אנוש'), 'hr');
+});
+test('strauss quality systems technician -> mechanical-manufacturing', () => {
+  assert.equal(deriveJobCategory('מטמיע.ת מערכות איכות ישראל החלפה לחל"ד - כל הארץ', 'הנדסה'), 'mechanical-manufacturing');
+});
+test('strauss warehouse inventory -> operations-logistics', () => {
+  assert.equal(deriveJobCategory('אמין.ת מלאי - אתר שוהם', 'לוגיסטיקה (אחסנה, הפצה, הובלה)'), 'operations-logistics');
+});
+test('strauss accounting assistant -> finance', () => {
+  assert.equal(deriveJobCategory('עוזר.ת חשבת במחלקה המקצועית ודיווח כספי - פתח תקווה', 'כספים'), 'finance');
+});
+
+// Never default to software: unmatched -> other.
+test('unmatched title -> other, never software', () => {
+  assert.equal(deriveJobCategory('רכז/ת רישיונות', null), 'admin');
+  assert.equal(deriveJobCategory('Order Management Specialist', null), 'operations-logistics');
+  assert.equal(deriveJobCategory('מחסנא/ית', null), 'operations-logistics');
+  assert.equal(deriveJobCategory('סוקר/ת מפעלי', null), 'other');
+  assert.equal(deriveJobCategory('', null), 'other');
+  assert.equal(deriveJobCategory(null, null), 'other');
+});
+
+// Substring safety: רכז must not match inside מרכז.
+test('מרכז does not trigger admin via רכז', () => {
+  assert.equal(deriveJobCategory('מנהל.ת מרכז תובנות ומחקר', 'שיווק יח"צ וייצוא'), 'marketing');
+});
+
+// Generic management title is refined by department.
+test('management refined by department', () => {
+  assert.equal(deriveJobCategory('מנהל.ת תוכן - פתח תקווה', 'שיווק יח"צ וייצוא'), 'marketing');
+  assert.equal(deriveJobCategory('מנהל.ת בקרה תקציבית', 'כלכלה ובקרה'), 'finance');
+  assert.equal(deriveJobCategory('Project Manager', null), 'management');
+});
+
+// Core EN + HE categories.
+test('core classifications', () => {
+  assert.equal(deriveJobCategory('Senior Backend Engineer', null), 'software');
+  assert.equal(deriveJobCategory('מהנדס/ת תוכנה RT', null), 'software');
+  assert.equal(deriveJobCategory('C++ SW Engineer', null), 'software');
+  assert.equal(deriveJobCategory('Data Engineer', null), 'data-ai');
+  assert.equal(deriveJobCategory('חוקר/ת AI בכיר/ה', null), 'data-ai');
+  assert.equal(deriveJobCategory('QA Automation Engineer', null), 'qa');
+  assert.equal(deriveJobCategory('DevOps Engineer', null), 'devops');
+  assert.equal(deriveJobCategory('Security Researcher', null), 'security');
+  assert.equal(deriveJobCategory('Security Officer', null), 'other'); // physical guard, not tech
+  assert.equal(deriveJobCategory('Product Manager', null), 'product');
+  assert.equal(deriveJobCategory('UX Designer', null), 'design');
+  assert.equal(deriveJobCategory('Account Executive', null), 'sales');
+  assert.equal(deriveJobCategory('מנהל.ת לקוחות יבש', 'מכירות'), 'sales');
+  assert.equal(deriveJobCategory('Customer Success Manager', null), 'customer-support');
+  assert.equal(deriveJobCategory('נציג/ת שירות לקוחות', null), 'customer-support');
+  assert.equal(deriveJobCategory('Financial Controller', null), 'finance');
+  assert.equal(deriveJobCategory('רואה חשבון', null), 'finance');
+  assert.equal(deriveJobCategory('Supply Chain Manager', null), 'operations-logistics');
+  assert.equal(deriveJobCategory('נהג.ת תובלה', null), 'operations-logistics');
+  assert.equal(deriveJobCategory('FPGA Engineer', null), 'hardware-electronics');
+  assert.equal(deriveJobCategory('טכנאי/ת אוטומציה וחשמל', 'אחזקה'), 'mechanical-manufacturing');
+  assert.equal(deriveJobCategory('Mechanical Engineer', null), 'mechanical-manufacturing');
+  assert.equal(deriveJobCategory('מזכיר.ת מנכל"ית', null), 'admin');
+  assert.equal(deriveJobCategory('VP Engineering', null), 'management');
+});
+
+// Infrastructure technician (facilities/energy) is not DevOps.
+test('HE תשתיות without computing context is not devops', () => {
+  assert.equal(deriveJobCategory('טכנאי.ת תשתיות ואנרגיה', 'אחזקה'), 'mechanical-manufacturing');
+  assert.equal(deriveJobCategory('מהנדס תשתיות מחשוב', null), 'devops');
+});
