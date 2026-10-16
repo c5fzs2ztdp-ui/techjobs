@@ -99,7 +99,9 @@ function normalizeCity(raw) {
       return { city: m.en, cityHe: m.he };
     }
   }
-  return { city: raw.trim(), cityHe: null };
+  // Never pass through an unmapped raw string: city is canonical-only-or-null
+  // (raw location stays available in the location field for display).
+  return { city: null, cityHe: null };
 }
 
 // --- Job category derivation from title (ordered, first match wins) ---
