@@ -1,6 +1,10 @@
 # TechJobs - Israeli Tech Job Board
 
-A full-stack application for browsing Israeli tech jobs, built with React, Express.js, and SQLite.
+A full-stack application for browsing Israeli tech jobs, built with React, Express.js, and Supabase.
+
+**Job data** comes exclusively from the [techjob_map](https://github.com/halleelyasaf/techjob_map) pipeline (6,700+ verified Israeli tech jobs from official company sources). A scheduled workflow in this repo converts the latest `data/jobs.json` into the payload on the [`data` branch](../../tree/data), which the frontend fetches directly - so data updates never require a site redeploy.
+
+**No login required to browse.** Guests can search and filter all jobs; signing in with Google is only needed to sync saved jobs and applied tracking across devices (guest saves stay in browser localStorage).
 
 ## 🏗️ Architecture
 

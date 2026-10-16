@@ -65,3 +65,4 @@ coverage/
 
 # Cookies/session files
 cookies.txt
+public-data/

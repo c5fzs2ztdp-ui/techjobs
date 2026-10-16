@@ -7,11 +7,11 @@ import { Briefcase, ChevronLeft, ChevronRight, Building2 } from "lucide-react";
 import { Link, useLocation } from "react-router-dom";
 import { createPageUrl } from "@/utils";
 
-import FilterSidebar, { type Filters } from "@/components/jobs/FilterSidebar";
+import FilterSidebar, { EMPTY_FILTERS, type Filters } from "@/components/jobs/FilterSidebar";
 import SearchHeader from "@/components/jobs/SearchHeader";
 import JobCard from "@/components/jobs/JobCard";
 import JobsLoader from "@/components/jobs/JobsLoader";
-import { fetchAllJobs, type Job } from "@/components/jobs/jobsData";
+import { displayCity, fetchAllJobs, type Job } from "@/components/jobs/jobsData";
 import { savedJobsApi } from "@/api/storage";
 
 // Types for mutation results
@@ -22,27 +22,24 @@ const JOBS_PER_PAGE = 20;
 
 export default function Jobs() {
   const posthog = usePostHog();
-  const [filters, setFilters] = useState<Filters>({
-    search: '',
-    categories: [],
-    jobCategories: [],
-    levels: [],
-    sizes: [],
-    cities: []
-  });
+  const [filters, setFilters] = useState<Filters>({ ...EMPTY_FILTERS });
   const location = useLocation();
   const searchParams = new URLSearchParams(location.search);
   const initialSearch = searchParams.get('search') || '';
   const initialCategory = searchParams.get('category') || '';
+  const initialCity = searchParams.get('city') || '';
 
   const [searchQuery, setSearchQuery] = useState(initialSearch);
 
-  // Apply category from URL on mount
+  // Apply category/city from URL on mount
   useEffect(() => {
     if (initialCategory) {
-      setFilters(prev => ({ ...prev, categories: [initialCategory] }));
+      setFilters(prev => ({ ...prev, jobCategories: [initialCategory] }));
     }
-  }, [initialCategory]);
+    if (initialCity) {
+      setFilters(prev => ({ ...prev, cities: [initialCity] }));
+    }
+  }, [initialCategory, initialCity]);
   const [isFilterOpen, setIsFilterOpen] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
 
@@ -77,11 +74,10 @@ export default function Jobs() {
         await savedJobsApi.create({
           job_title: job.title,
           company: job.company,
-          category: job.category,
-          city: job.city,
+          category: job.department || undefined,
+          city: displayCity(job),
           url: job.url,
-          level: job.level,
-          size: job.size,
+          level: job.seniority || undefined,
           job_category: job.job_category
         });
         return { action: 'saved', job };
@@ -94,9 +90,9 @@ export default function Jobs() {
       posthog.capture(result.action === 'saved' ? 'job_saved' : 'job_unsaved', {
         job_title: result.job.title,
         company: result.job.company,
-        category: result.job.category,
+        job_category: result.job.job_category,
         city: result.job.city,
-        level: result.job.level,
+        seniority: result.job.seniority,
       });
     },
   });
@@ -114,11 +110,10 @@ export default function Jobs() {
         await savedJobsApi.create({
           job_title: job.title,
           company: job.company,
-          category: job.category,
-          city: job.city,
+          category: job.department || undefined,
+          city: displayCity(job),
           url: job.url,
-          level: job.level,
-          size: job.size,
+          level: job.seniority || undefined,
           job_category: job.job_category,
           applied: true,
           applied_date: new Date().toISOString().split('T')[0]
@@ -133,16 +128,16 @@ export default function Jobs() {
       posthog.capture(result.action === 'applied' ? 'job_applied' : 'job_unapplied', {
         job_title: result.job.title,
         company: result.job.company,
-        category: result.job.category,
+        job_category: result.job.job_category,
         city: result.job.city,
-        level: result.job.level,
+        seniority: result.job.seniority,
       });
     },
   });
 
   // Extract unique cities from jobs
   const cities = useMemo(() => {
-    const citySet = new Set(jobs.map(job => job.city).filter(Boolean));
+    const citySet = new Set(jobs.map(job => displayCity(job)).filter(Boolean));
     return Array.from(citySet).sort();
   }, [jobs]);
 
@@ -155,14 +150,11 @@ export default function Jobs() {
         const matchesSearch =
           job.title?.toLowerCase().includes(search) ||
           job.company?.toLowerCase().includes(search) ||
-          job.category?.toLowerCase().includes(search) ||
-          job.city?.toLowerCase().includes(search);
+          job.department?.toLowerCase().includes(search) ||
+          job.city?.toLowerCase().includes(search) ||
+          job.cityHe?.includes(searchQuery) ||
+          job.technologies.some(t => t.toLowerCase().includes(search));
         if (!matchesSearch) return false;
-      }
-
-      // Category filter
-      if (filters.categories.length > 0 && !filters.categories.includes(job.category)) {
-        return false;
       }
 
       // Job category filter
@@ -170,56 +162,25 @@ export default function Jobs() {
         return false;
       }
 
-      // Level filter
-      if (filters.levels.length > 0) {
-        const titleLower = job.title?.toLowerCase() || '';
-        const jobLevel = job.level?.toLowerCase() || '';
-
-        const matchesLevel = filters.levels.some(level => {
-          const levelLower = level.toLowerCase();
-          if (levelLower === 'junior') {
-            return titleLower.includes('junior') || titleLower.includes('jr.') || titleLower.includes('jr ');
-          }
-          if (levelLower === 'mid-level') {
-            return !titleLower.includes('senior') && !titleLower.includes('junior') && !titleLower.includes('lead') && !titleLower.includes('staff') && !titleLower.includes('principal') && !titleLower.includes('director') && !titleLower.includes('head of') && !titleLower.includes('vp');
-          }
-          if (levelLower === 'senior') {
-            return titleLower.includes('senior') || titleLower.includes('sr.') || titleLower.includes('sr ');
-          }
-          if (levelLower === 'staff') {
-            return titleLower.includes('staff') || titleLower.includes('principal');
-          }
-          if (levelLower === 'lead') {
-            return titleLower.includes('lead') && !titleLower.includes('team lead');
-          }
-          if (levelLower === 'team lead') {
-            return titleLower.includes('team lead') || titleLower.includes('tl ') || titleLower.includes('tech lead');
-          }
-          if (levelLower === 'manager') {
-            return jobLevel === 'manager' || titleLower.includes('manager');
-          }
-          if (levelLower === 'director') {
-            return titleLower.includes('director');
-          }
-          if (levelLower === 'executive') {
-            return jobLevel === 'executive' || titleLower.includes('head of') || titleLower.includes('vp') || titleLower.includes('cto') || titleLower.includes('ceo') || titleLower.includes('chief');
-          }
-          if (levelLower === 'intern') {
-            return titleLower.includes('intern') || titleLower.includes('student');
-          }
-          return false;
-        });
-
-        if (!matchesLevel) return false;
-      }
-
-      // Size filter
-      if (filters.sizes.length > 0 && !filters.sizes.includes(job.size)) {
+      // Work model filter
+      if (filters.workModels.length > 0 && (!job.workModel || !filters.workModels.includes(job.workModel))) {
         return false;
       }
 
-      // City filter
-      if (filters.cities.length > 0 && !filters.cities.includes(job.city)) {
+      // Employment type filter
+      if (filters.employmentTypes.length > 0 && (!job.employmentType || !filters.employmentTypes.includes(job.employmentType))) {
+        return false;
+      }
+
+      // Seniority filter
+      if (filters.seniorities.length > 0 && (!job.seniority || !filters.seniorities.includes(job.seniority))) {
+        return false;
+      }
+
+      // City filter (matches the displayed label or the canonical English city)
+      if (filters.cities.length > 0 &&
+          !filters.cities.includes(displayCity(job)) &&
+          !filters.cities.includes(job.city || '')) {
         return false;
       }
 
@@ -259,10 +220,10 @@ export default function Jobs() {
   }, [currentPage]);
 
   const activeFiltersCount =
-    filters.categories.length +
     filters.jobCategories.length +
-    filters.levels.length +
-    filters.sizes.length +
+    filters.workModels.length +
+    filters.employmentTypes.length +
+    filters.seniorities.length +
     filters.cities.length;
 
   const isJobSaved = (job: Job) => savedJobs.some(s => s.url === job.url);

@@ -6,37 +6,35 @@ import { X, RotateCcw } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useMobileDialogAccessibility } from "@/hooks/useDialogAccessibility";
 
-const categories = [
-  "AI/ML", "AdTech", "Aerospace", "AR/VR", "Automotive", "Cloud Computing",
-  "Cybersecurity", "Digital Media", "E-commerce & Retail", "Fintech", "Gaming",
-  "Health", "IoT", "Productivity", "Robotics & Automation", "Semiconductors",
-  "Sustainable Technology", "Telecommunications"
-];
-
 const jobCategories = [
   "software", "frontend", "devops", "data-science", "design", "product",
   "project-management", "qa", "security", "hardware", "marketing", "sales",
   "hr", "finance", "legal", "business", "admin", "procurement-operations", "support"
 ];
 
-const levels = ["Junior", "Mid-Level", "Senior", "Staff", "Lead", "Team Lead", "Manager", "Director", "Executive", "Intern"];
+const workModels = ["remote", "hybrid", "on-site"];
 
-const sizes = [
-  { value: "xs", label: "1-10" },
-  { value: "s", label: "11-50" },
-  { value: "m", label: "51-200" },
-  { value: "l", label: "201-1,000" },
-  { value: "xl", label: "1,001+" }
-];
+const employmentTypes = ["full-time", "part-time", "student", "intern", "temp", "contract"];
+
+const seniorities = ["intern", "junior", "senior", "staff", "principal", "lead", "manager"];
 
 export interface Filters {
   search: string;
-  categories: string[];
   jobCategories: string[];
-  levels: string[];
-  sizes: string[];
+  workModels: string[];
+  employmentTypes: string[];
+  seniorities: string[];
   cities: string[];
 }
+
+export const EMPTY_FILTERS: Filters = {
+  search: '',
+  jobCategories: [],
+  workModels: [],
+  employmentTypes: [],
+  seniorities: [],
+  cities: []
+};
 
 interface FilterSidebarProps {
   filters: Filters;
@@ -61,68 +59,49 @@ export default function FilterSidebar({
     onClose,
   });
 
-  const handleCategoryToggle = (category: string) => {
+  const toggleListFilter = (key: keyof Omit<Filters, 'search'>, value: string) => {
     setFilters(prev => ({
       ...prev,
-      categories: prev.categories.includes(category)
-        ? prev.categories.filter(c => c !== category)
-        : [...prev.categories, category]
+      [key]: prev[key].includes(value)
+        ? prev[key].filter(v => v !== value)
+        : [...prev[key], value]
     }));
   };
 
-  const handleJobCategoryToggle = (jobCat: string) => {
-    setFilters(prev => ({
-      ...prev,
-      jobCategories: prev.jobCategories.includes(jobCat)
-        ? prev.jobCategories.filter(c => c !== jobCat)
-        : [...prev.jobCategories, jobCat]
-    }));
-  };
-
-  const handleLevelToggle = (level: string) => {
-    setFilters(prev => ({
-      ...prev,
-      levels: prev.levels.includes(level)
-        ? prev.levels.filter(l => l !== level)
-        : [...prev.levels, level]
-    }));
-  };
-
-  const handleSizeToggle = (size: string) => {
-    setFilters(prev => ({
-      ...prev,
-      sizes: prev.sizes.includes(size)
-        ? prev.sizes.filter(s => s !== size)
-        : [...prev.sizes, size]
-    }));
-  };
-
-  const handleCityToggle = (city: string) => {
-    setFilters(prev => ({
-      ...prev,
-      cities: prev.cities.includes(city)
-        ? prev.cities.filter(c => c !== city)
-        : [...prev.cities, city]
-    }));
-  };
-
-  const resetFilters = () => {
-    setFilters({
-      search: '',
-      categories: [],
-      jobCategories: [],
-      levels: [],
-      sizes: [],
-      cities: []
-    });
-  };
+  const resetFilters = () => setFilters({ ...EMPTY_FILTERS });
 
   const activeFiltersCount =
-    filters.categories.length +
     filters.jobCategories.length +
-    filters.levels.length +
-    filters.sizes.length +
+    filters.workModels.length +
+    filters.employmentTypes.length +
+    filters.seniorities.length +
     filters.cities.length;
+
+  const renderCheckboxList = (
+    legend: string,
+    values: string[],
+    selected: string[],
+    key: keyof Omit<Filters, 'search'>,
+    maxHeight = false
+  ) => (
+    <fieldset>
+      <legend className="font-medium text-sm text-warm-900 mb-3">{legend}</legend>
+      <div className={`space-y-2 ${maxHeight ? 'max-h-48 overflow-y-auto' : ''}`} role="group">
+        {values.map(value => (
+          <div key={value} className="flex items-center space-x-2">
+            <Checkbox
+              id={`${key}-${value}`}
+              checked={selected.includes(value)}
+              onCheckedChange={() => toggleListFilter(key, value)}
+            />
+            <Label htmlFor={`${key}-${value}`} className="text-sm text-warm-600 capitalize cursor-pointer">
+              {value.replace(/-/g, ' ')}
+            </Label>
+          </div>
+        ))}
+      </div>
+    </fieldset>
+  );
 
   const sidebarContent = (
     <aside className="h-full flex flex-col bg-white" aria-label="Job filters">
@@ -156,102 +135,11 @@ export default function FilterSidebar({
 
       <ScrollArea className="flex-1">
         <div className="p-4 space-y-6" aria-labelledby="filter-heading">
-          {/* Job Category */}
-          <fieldset>
-            <legend className="font-medium text-sm text-warm-900 mb-3">Job Category</legend>
-            <div className="space-y-2 max-h-48 overflow-y-auto" role="group">
-              {jobCategories.map(jobCat => (
-                <div key={jobCat} className="flex items-center space-x-2">
-                  <Checkbox
-                    id={`job-${jobCat}`}
-                    checked={filters.jobCategories.includes(jobCat)}
-                    onCheckedChange={() => handleJobCategoryToggle(jobCat)}
-                  />
-                  <Label htmlFor={`job-${jobCat}`} className="text-sm text-warm-600 capitalize cursor-pointer">
-                    {jobCat.replace(/-/g, ' ')}
-                  </Label>
-                </div>
-              ))}
-            </div>
-          </fieldset>
-
-          {/* Level */}
-          <fieldset>
-            <legend className="font-medium text-sm text-warm-900 mb-3">Experience Level</legend>
-            <div className="space-y-2" role="group">
-              {levels.map(level => (
-                <div key={level} className="flex items-center space-x-2">
-                  <Checkbox
-                    id={`level-${level}`}
-                    checked={filters.levels.includes(level)}
-                    onCheckedChange={() => handleLevelToggle(level)}
-                  />
-                  <Label htmlFor={`level-${level}`} className="text-sm text-warm-600 cursor-pointer">
-                    {level}
-                  </Label>
-                </div>
-              ))}
-            </div>
-          </fieldset>
-
-          {/* Industry */}
-          <fieldset>
-            <legend className="font-medium text-sm text-warm-900 mb-3">Industry</legend>
-            <div className="space-y-2 max-h-48 overflow-y-auto" role="group">
-              {categories.map(category => (
-                <div key={category} className="flex items-center space-x-2">
-                  <Checkbox
-                    id={`cat-${category}`}
-                    checked={filters.categories.includes(category)}
-                    onCheckedChange={() => handleCategoryToggle(category)}
-                  />
-                  <Label htmlFor={`cat-${category}`} className="text-sm text-warm-600 cursor-pointer">
-                    {category}
-                  </Label>
-                </div>
-              ))}
-            </div>
-          </fieldset>
-
-          {/* Company Size */}
-          <fieldset>
-            <legend className="font-medium text-sm text-warm-900 mb-3">Company Size</legend>
-            <div className="space-y-2" role="group">
-              {sizes.map(size => (
-                <div key={size.value} className="flex items-center space-x-2">
-                  <Checkbox
-                    id={`size-${size.value}`}
-                    checked={filters.sizes.includes(size.value)}
-                    onCheckedChange={() => handleSizeToggle(size.value)}
-                  />
-                  <Label htmlFor={`size-${size.value}`} className="text-sm text-warm-600 cursor-pointer">
-                    {size.label} employees
-                  </Label>
-                </div>
-              ))}
-            </div>
-          </fieldset>
-
-          {/* Cities */}
-          {cities.length > 0 && (
-            <fieldset>
-              <legend className="font-medium text-sm text-warm-900 mb-3">City</legend>
-              <div className="space-y-2 max-h-48 overflow-y-auto" role="group">
-                {cities.map(city => (
-                  <div key={city} className="flex items-center space-x-2">
-                    <Checkbox
-                      id={`city-${city}`}
-                      checked={filters.cities.includes(city)}
-                      onCheckedChange={() => handleCityToggle(city)}
-                    />
-                    <Label htmlFor={`city-${city}`} className="text-sm text-warm-600 cursor-pointer">
-                      {city}
-                    </Label>
-                  </div>
-                ))}
-              </div>
-            </fieldset>
-          )}
+          {renderCheckboxList("Job Category", jobCategories, filters.jobCategories, 'jobCategories', true)}
+          {renderCheckboxList("Work Model", workModels, filters.workModels, 'workModels')}
+          {renderCheckboxList("Employment Type", employmentTypes, filters.employmentTypes, 'employmentTypes')}
+          {renderCheckboxList("Seniority", seniorities, filters.seniorities, 'seniorities')}
+          {cities.length > 0 && renderCheckboxList("City", cities, filters.cities, 'cities', true)}
         </div>
       </ScrollArea>
     </aside>

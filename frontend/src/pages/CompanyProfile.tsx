@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { fetchAllJobs, type Job } from "@/components/jobs/jobsData";
+import { displayCity, fetchAllJobs, type Job } from "@/components/jobs/jobsData";
 import { Link } from "react-router-dom";
 import { createPageUrl } from "@/utils";
 import { Button } from "@/components/ui/button";
@@ -44,11 +44,10 @@ export default function CompanyProfile() {
         await savedJobsApi.create({
           job_title: job.title,
           company: job.company,
-          category: job.category,
-          city: job.city,
+          category: job.department || undefined,
+          city: displayCity(job),
           url: job.url,
-          level: job.level,
-          size: job.size,
+          level: job.seniority || undefined,
           job_category: job.job_category
         });
         return { action: 'saved' };
@@ -67,9 +66,8 @@ export default function CompanyProfile() {
     if (companyJobs.length === 0) return null;
 
     // Aggregate data
-    const categories = Array.from(new Set(companyJobs.map(j => j.category).filter(Boolean)));
-    const locations = Array.from(new Set(companyJobs.map(j => j.city).filter(Boolean)));
-    const sizes = Array.from(new Set(companyJobs.map(j => j.size).filter(Boolean)));
+    const categories = Array.from(new Set(companyJobs.map(j => j.department).filter(Boolean))) as string[];
+    const locations = Array.from(new Set(companyJobs.map(j => displayCity(j)).filter(Boolean)));
     const jobCategories = Array.from(new Set(companyJobs.map(j => j.job_category).filter(Boolean)));
 
     const filteredJobs = companyJobs.filter(job =>
@@ -77,7 +75,7 @@ export default function CompanyProfile() {
       job.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
       job.city?.toLowerCase().includes(searchQuery.toLowerCase()) ||
       job.job_category?.toLowerCase().includes(searchQuery.toLowerCase())
-    ).sort((a, b) => new Date(b.updated).getTime() - new Date(a.updated).getTime());
+    ).sort((a, b) => (b.updated ? new Date(b.updated).getTime() : 0) - (a.updated ? new Date(a.updated).getTime() : 0));
 
     return {
       name: companyName,
@@ -85,21 +83,12 @@ export default function CompanyProfile() {
       totalJobs: companyJobs.length,
       categories,
       locations,
-      sizes,
       jobCategories,
       latestUpdate: companyJobs[0]?.updated
     };
   }, [jobs, companyName, searchQuery]);
 
   const isJobSaved = (job: Job) => savedJobs.some(s => s.url === job.url);
-
-  const sizeLabels: Record<string, string> = {
-    'xs': '1-10',
-    's': '11-50',
-    'm': '51-200',
-    'l': '201-1,000',
-    'xl': '1,001+'
-  };
 
   if (!companyName) {
     return (
@@ -143,11 +132,13 @@ export default function CompanyProfile() {
                     <div className="space-y-2">
                       <div>
                         <h1 className="text-3xl font-bold text-warm-900">{companyData.name}</h1>
-                        <div className="flex items-center gap-2 text-warm-500 mt-1">
-                          <Badge variant="secondary" className="font-normal">
-                            {companyData.categories.join(', ')}
-                          </Badge>
-                        </div>
+                        {companyData.categories.length > 0 && (
+                          <div className="flex items-center gap-2 text-warm-500 mt-1">
+                            <Badge variant="secondary" className="font-normal">
+                              {companyData.categories.join(', ')}
+                            </Badge>
+                          </div>
+                        )}
                       </div>
                     </div>
                   </div>
@@ -157,7 +148,7 @@ export default function CompanyProfile() {
                   <div className="flex items-center gap-2 text-warm-600">
                     <Users className="w-4 h-4 text-warm-400" />
                     <span>
-                      {companyData.sizes.map(s => sizeLabels[s] || s).join(', ') || 'Size not specified'}
+                      {companyData.locations.join(', ') || 'Location not specified'}
                     </span>
                   </div>
                   <Button asChild variant="outline" size="sm" className="gap-2 justify-start">

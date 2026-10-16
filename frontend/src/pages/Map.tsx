@@ -1,13 +1,12 @@
 import { useEffect, useState, useMemo } from "react";
 import { Link } from "react-router-dom";
 import { createPageUrl } from "@/utils";
-import { Building2, Briefcase, Loader2, AlertCircle, Lock } from "lucide-react";
+import { Building2, Briefcase, Loader2, AlertCircle } from "lucide-react";
 import { MapContainer, TileLayer, Marker, Popup, useMap } from "react-leaflet";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 import { fetchAllJobs } from "@/components/jobs/jobsData";
 import type { Job } from "@/components/jobs/jobsData";
-import { useAuth } from "@/hooks/useAuth";
 
 // Israeli city coordinates - English and Hebrew names
 const CITY_COORDS: Record<string, [number, number]> = {
@@ -264,7 +263,6 @@ function FitBounds({ cities }: { cities: CityData[] }) {
 }
 
 export default function Map() {
-  const { isAuthenticated, login } = useAuth();
   const [jobs, setJobs] = useState<Job[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -427,22 +425,12 @@ export default function Map() {
                         )}
                       </div>
                     </div>
-                    {isAuthenticated ? (
-                      <Link
-                        to={`${createPageUrl("Jobs")}?city=${encodeURIComponent(city.city)}`}
-                        className="mt-3 block text-center text-sm text-iris-600 hover:text-iris-700 font-medium"
-                      >
-                        View all jobs in {city.city} →
-                      </Link>
-                    ) : (
-                      <button
-                        onClick={() => login(window.location.href)}
-                        className="mt-3 w-full flex items-center justify-center gap-1 text-sm text-warm-500 hover:text-iris-600 font-medium"
-                      >
-                        <Lock className="w-3 h-3" />
-                        Sign in to view jobs
-                      </button>
-                    )}
+                    <Link
+                      to={`${createPageUrl("Jobs")}?city=${encodeURIComponent(city.city)}`}
+                      className="mt-3 block text-center text-sm text-iris-600 hover:text-iris-700 font-medium"
+                    >
+                      View all jobs in {city.city} →
+                    </Link>
                   </div>
                 </Popup>
               </Marker>
