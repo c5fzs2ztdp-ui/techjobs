@@ -6,12 +6,13 @@ import { X, RotateCcw } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useMobileDialogAccessibility } from "@/hooks/useDialogAccessibility";
 import { EMPTY_FILTERS, type Filters } from "./filters";
-import { REGION_LABELS } from "./jobsData";
+import { REGION_LABELS, CATEGORY_LABELS } from "./jobsData";
 
 const jobCategories = [
-  "software", "frontend", "devops", "data-science", "design", "product",
-  "project-management", "qa", "security", "hardware", "marketing", "sales",
-  "hr", "finance", "legal", "business", "admin", "procurement-operations", "support"
+  "software", "data-ai", "qa", "devops", "security", "product", "design",
+  "sales", "marketing", "hr", "finance", "operations-logistics",
+  "customer-support", "hardware-electronics", "mechanical-manufacturing",
+  "management", "admin", "other"
 ];
 
 const workModels = ["remote", "hybrid", "on-site"];
@@ -125,7 +126,7 @@ export default function FilterSidebar({
 
       <ScrollArea className="flex-1">
         <div className="p-4 space-y-6" aria-labelledby="filter-heading">
-          {renderCheckboxList("Job Category", jobCategories, filters.jobCategories, 'jobCategories', true)}
+          {renderCheckboxList("Job Category", jobCategories, filters.jobCategories, 'jobCategories', true, v => CATEGORY_LABELS[v] || v)}
           {renderCheckboxList("Region", regions, filters.regions, 'regions', false, v => REGION_LABELS[v] || v)}
           {renderCheckboxList("Work Model", workModels, filters.workModels, 'workModels')}
           {renderCheckboxList("Employment Type", employmentTypes, filters.employmentTypes, 'employmentTypes')}

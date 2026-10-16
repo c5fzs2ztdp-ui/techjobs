@@ -4,8 +4,9 @@
 import fs from 'node:fs';
 import path from 'node:path';
 
+const isMain = !!process.argv[1] && process.argv[1].endsWith('convert_jobs.mjs');
 const [,, inputPath, outputPath] = process.argv;
-if (!inputPath || !outputPath) {
+if (isMain && (!inputPath || !outputPath)) {
   console.error('Usage: node scripts/convert_jobs.mjs <input jobs.json> <output jobs.json>');
   process.exit(1);
 }
@@ -104,34 +105,58 @@ function normalizeCity(raw) {
   return { city: null, cityHe: null };
 }
 
-// --- Job category derivation from title (ordered, first match wins) ---
-const CATEGORY_RULES = [
-  ['qa', /\bqa\b|quality assurance|test automation|automation engineer|\bsdet\b|\btest(s|ing)? engineer/],
-  ['security', /security|cyber|\bsoc\b|penetration|appsec|product security/],
-  ['devops', /devops|\bsre\b|site reliability|platform engineer|infrastructure engineer|cloud (engineer|architect)|system administrator|\bsysadmin/],
-  ['data-science', /data scien|machine learning|\bml\b|\bai\b|artificial intelligence|data engineer|data analy|\banalyst|big data|algorithm|research scien|deep learning|\bnlp\b|computer vision|bi develop|\bdata\b/],
-  ['hardware', /hardware|fpga|asic|vlsi|embedded|firmware|chip|silicon|electronics|\bpcb\b|\brf\b|validation engineer|board design/],
-  ['design', /designer|\bux\b|\bui\b|graphic|motion design/],
-  ['product', /product (manager|owner|lead|management)|group product/],
-  ['project-management', /project manager|program manager|\bpmo\b|delivery manager|scrum master/],
-  ['frontend', /front.?end|react (developer|engineer)/],
-  ['marketing', /marketing|growth|seo|content (writer|manager|marketing)|brand|demand generation|campaign/],
-  ['sales', /sales|account executive|account manager|business development|\bbdr\b|\bsdr\b|customer account/],
-  ['hr', /\bhr\b|human resources|recruit|talent (acquisition|sourc)|people (operations|partner)/],
-  ['finance', /financ|controller|accountant|bookkeep|payroll|\bcfo\b|\bfp&a\b/],
-  ['legal', /legal|counsel|attorney|lawyer|compliance/],
-  ['support', /(customer|technical|client|it) (support|success|service)|customer success|help ?desk|support engineer|\btam\b/],
-  ['business', /business (development|analyst)|strateg/],
-  ['procurement-operations', /procurement|operations|supply chain|logistics|warehouse/],
-  ['admin', /administra|office manager|executive assistant|personal assistant|receptionist/],
+// --- Job category derivation (title first, then department; EN + HE) ---
+// Taxonomy (18 slugs): software, data-ai, qa, devops, security, product,
+// design, sales, marketing, hr, finance, operations-logistics,
+// customer-support, hardware-electronics, mechanical-manufacturing,
+// management, admin, other. Unmatched is ALWAYS 'other', never software.
+const TITLE_RULES = [
+  // specific professions first (order matters, first match wins)
+  ['hr', /\bhr\b|\bhrbp\b|human resources|recruit|talent (acquisition|sourc|partner)|people (operations|partner)|משאבי אנוש|כוח אדם|גיוס|מגייס/],
+  ['product', /product (manager|owner|lead|management)|group product|\bcpo\b|מנהל\/?\.?ת? מוצר|אחראי\/?\.?ת? מוצר/],
+  ['qa', /\bqa\b|quality assurance|\bsdet\b|test automation|automation engineer|\btest(s|ing)? engineer|בדיקות תוכנה|בודק\/?\.?ת? תוכנה/],
+  ['security', /cyber|infosec|appsec|devsecops|product security|security (engineer|researcher?|architect|analyst|consultant|expert)|penetration test|malware|vulnerabilit|threat (prevention|intelligence|hunt)|incident response|endpoint (security|protection|research)|סייבר|אבטחת מידע|אבטחת מערכות/],
+  ['devops', /devops|\bsre\b|site reliability|platform engineer|infrastructure engineer|finops|cloud (engineer|architect)|systems? administrator|\bsysadmin|network engineer|\bit (engineer|manager|specialist)|דבאופס|תשתיות (מחשוב|מידע|טכנולוג)|מנהל\/?\.?ת? מערכת|סיסטם/],
+  ['data-ai', /data scien|data engineer|data analy|machine learning|deep learning|artificial intelligence|\bmlops\b|\bml (engineer|researcher)|\bai\b|data platform|algorithm|research scien|computer vision|\bnlp\b|big data|business intelligence|\bbi (developer|analyst|engineer)|דאטה|נתונים|למידת מכונה|בינה מלאכותית|אלגוריתמ/],
+  ['hardware-electronics', /hardware|fpga|asic|vlsi|embedded|firmware|\bsilicon\b|electronics|\bpcb\b|\brf engineer|board design|validation engineer|חומרה|אלקטרוניקה|מהנדס\/?\.?ת? מערכ|אינטגרציה|שילובים|תקשורת|ניווט/],
+  ['mechanical-manufacturing', /mechanical|mechatronics|manufacturing|production (engineer|manager|operator|worker|line)|machinist|technician|maintenance|\bcnc\b|welder|electrician|industrial engineer|process engineer|quality (engineer|technician|inspector|systems|manager)|מכונות|מכאנ|מכונאי|טכנאי|תכן|מכני|מתקין|יצור|אחזקה|ייצור|תעשייה וניהול|מהנדס\/?\.?ת? תעשייה|חשמלאי|רתך|מסגר|איכות|הנדסאי|מכטרוניקה|בקרת הינע/],
+  ['design', /designer|\bux\b|\bui\b|graphic|motion design|מעצב|חוויית? משתמש|גרפיק/],
+  ['sales', /sales|account executive|account manager|business development|\bbdr\b|\bsdr\b|pre-?sales|מכירות|פיתוח עסקי|מנהל\/?\.?ת? לקוחות|יועץ\/?\.?ת? מכירות/],
+  ['customer-support', /customer (support|success|service|experience)|technical support|help ?desk|support (engineer|specialist|representative)|\btam\b|technical account manager|client services?|professional services|שירות לקוחות|נציג\/?\.?ת?( שירות| |$)|תמיכה|מוקד|הצלחת לקוח/],
+  ['marketing', /marketing|growth (manager|marketing)|\bseo\b|content (writer|manager)|brand|demand generation|campaign|copywriter|social media|שיווק|משווק|מותג|קמפיין|דיגיטל/],
+  ['finance', /financ|controller|accountant|accounting|bookkeep|payroll|\bcfo\b|fp&a|auditor|treasury|כספים|הנהלת חשבונות|הנה"ח|רואה חשבון|רו"ח|חשב\/?\.?ת?|כלכלה|פיננס/],
+  ['operations-logistics', /operations|supply chain|logistics|warehouse|procurement|inventory|shipping|fleet|facilities|\bdriver\b|order management|לוגיסטיק|רכש|קניין|מחסנא|מחסן|אחסנה|הפצה|הובלה|שרשרת אספקה|תפעול|מלאי|מלגז|נהג/],
+  ['admin', /administra|office manager|executive assistant|personal assistant|receptionist|secretary|clerical|אדמיניסטר|מזכיר|משרדי|פקיד|(^|[^א-ת])רכז(?=[\/ ]|$)/],
+  ['software', /software|full.?stack|back.?end|front.?end|web (developer|engineer)|mobile (developer|engineer)|android (developer|engineer)|\bios (developer|engineer)|application (developer|engineer)|\bsw (engineer|developer)|c\+\+|\bjava\b|\bpython\b|\bgolang\b|\brust\b|\bkotlin\b|\bscala\b|\bphp\b|\bruby on rails\b|dotnet|\.net (developer|engineer)|\bc#\b|linux kernel|macos|\bsap\b|מתכנת|תוכנה|פיתוח(?! עסקי)|מפתח\/?\.?ת?|פולסטאק/],
+  ['management', /vice president|\bvp\b|general manager|managing director|director of|head of|group manager|department manager|project manager|program manager|\bpmo\b|delivery manager|scrum master|engineering manager|\bmanager\b|מנהל|ראש מחלקה|ראש תחום|סמנכ"ל|מנכ"ל|סגן נשיא/],
 ];
-function deriveJobCategory(title) {
+// Department is a strong signal when the title alone did not classify (EN + HE).
+const DEPT_RULES = [
+  ['software', /מו"פ|טכנולוגיה|r&d|research|engineering|development|software|\bit\b|information technology/],
+  ['sales', /מכירות|sales/],
+  ['marketing', /שיווק|יח"צ|ייצוא|marketing/],
+  ['hr', /משאבי אנוש|כוח אדם|hr|human resources/],
+  ['finance', /כספים|כלכלה|בקרה|הנהלת חשבונות|finance|accounting/],
+  ['operations-logistics', /לוגיסטיק|אחסנה|הפצה|הובלה|תפעול|operations|logistics|supply chain/],
+  ['mechanical-manufacturing', /איכות|אחזקה|הנדסה|ייצור|quality|maintenance|manufacturing|production/],
+  ['customer-support', /שירות|תמיכה|support|customer/],
+  ['admin', /פקידות|מזכירות|אדמיניסטר|admin/],
+];
+export function deriveJobCategory(title, department) {
   const t = (title || '').toLowerCase();
-  for (const [cat, re] of CATEGORY_RULES) if (re.test(t)) return cat;
-  return 'software';
+  let titleCat = null;
+  for (const [cat, re] of TITLE_RULES) if (re.test(t)) { titleCat = cat; break; }
+  // A specific title match wins. A generic 'management' match is refined by
+  // the department when one is known (e.g. "content manager" + שיווק -> marketing).
+  if (titleCat && titleCat !== 'management') return titleCat;
+  const d = (department || '').toLowerCase();
+  if (d) for (const [cat, re] of DEPT_RULES) if (re.test(d)) return cat;
+  return titleCat || 'other';
 }
 
 // --- Convert ---
+if (isMain) {
+
 const raw = JSON.parse(fs.readFileSync(inputPath, 'utf8'));
 if (!Array.isArray(raw)) { console.error('Input is not a JSON array'); process.exit(1); }
 
@@ -166,7 +191,7 @@ const jobs = raw.map(j => {
     regions: Array.isArray(j.regions) ? j.regions : (j.region ? [j.region] : []),
     // site-specific derived fields
     cityHe,
-    job_category: deriveJobCategory(j.title),
+    job_category: deriveJobCategory(j.title, j.department),
     updated: j.postedAt || j.verifiedAt || j.firstSeenAt || null,
   };
 });
@@ -195,3 +220,5 @@ console.log(JSON.stringify({
   postedAt: stat('postedAt'),
   categories: Object.fromEntries([...new Set(jobs.map(j => j.job_category))].map(c => [c, jobs.filter(j => j.job_category === c).length]).sort((a, b) => b[1] - a[1])),
 }, null, 1));
+
+}
