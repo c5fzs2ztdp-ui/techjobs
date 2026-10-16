@@ -71,3 +71,15 @@ test('HE תשתיות without computing context is not devops', () => {
   assert.equal(deriveJobCategory('טכנאי.ת תשתיות ואנרגיה', 'אחזקה'), 'mechanical-manufacturing');
   assert.equal(deriveJobCategory('מהנדס תשתיות מחשוב', null), 'devops');
 });
+
+// User feedback: טכנולוג (technologist) is not software.
+test('technologist titles are not software', () => {
+  assert.equal(deriveJobCategory('טכנולוג.ית פרוייקטים', 'מו"פ וטכנולוגיה'), 'mechanical-manufacturing');
+  assert.equal(deriveJobCategory('טכנולוג.ית מחקר ופיתוח - יטבתה', 'מו"פ וטכנולוגיה'), 'mechanical-manufacturing');
+  assert.equal(deriveJobCategory('מהנדס.ת פיתוח טכנולוגי', 'מו"פ וטכנולוגיה'), 'other');
+  assert.equal(deriveJobCategory('Technologist', null), 'mechanical-manufacturing');
+  // IT-context טכנולוגיות must not hit the technologist rule
+  assert.notEqual(deriveJobCategory('מהנדס טכנולוגיות מידע', null), 'mechanical-manufacturing');
+  // real software development in Hebrew still classifies
+  assert.equal(deriveJobCategory('מהנדס פיתוח תוכנה', null), 'software');
+});
