@@ -156,6 +156,10 @@ const jobs = raw.map(j => {
     lastRefreshAttemptAt: j.lastRefreshAttemptAt ?? null,
     lastRefreshError: j.lastRefreshError ?? null,
     refreshState: j.refreshState ?? null,
+    region: j.region ?? null,
+    locationSource: j.locationSource ?? null,
+    cities: Array.isArray(j.cities) ? j.cities : (j.city ? [j.city] : []),
+    regions: Array.isArray(j.regions) ? j.regions : (j.region ? [j.region] : []),
     // site-specific derived fields
     cityHe,
     job_category: deriveJobCategory(j.title),

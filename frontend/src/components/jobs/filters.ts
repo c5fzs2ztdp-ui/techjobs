@@ -5,6 +5,7 @@ export interface Filters {
   employmentTypes: string[];
   seniorities: string[];
   cities: string[];
+  regions: string[];
 }
 
 export const EMPTY_FILTERS: Filters = {
@@ -13,5 +14,6 @@ export const EMPTY_FILTERS: Filters = {
   workModels: [],
   employmentTypes: [],
   seniorities: [],
-  cities: []
+  cities: [],
+  regions: []
 };

@@ -112,7 +112,9 @@ export default function JobCard({ job, onSave, isSaved, onApply, isApplied, inde
                 {city && (
                   <div className="flex items-center gap-1.5">
                     <MapPin className="w-4 h-4 text-warm-400" aria-hidden="true" />
-                    <span aria-label={`Location: ${city}`}>{city}</span>
+                    <span aria-label={`Location: ${city}`}>
+                      {city}{job.cities.length > 1 && ` +${job.cities.length - 1}`}
+                    </span>
                   </div>
                 )}
                 {job.workModel && WorkModelIcon && (
