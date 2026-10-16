@@ -65,6 +65,8 @@ const CITIES = [
   ['Beit HaEmek', 'בית העמק', ['beit haemek', 'בית העמק']],
   ['Shfela', 'שפלה', ['שפלה']],
   ['Ramat HaGolan', 'רמת הגולן', ['ramat hagolan', 'רמת הגולן']],
+  ['Kiryat Bialik', 'קריית ביאליק', ['kiryat bialik', 'קריית ביאליק', 'קרית ביאליק']],
+  ['Kiryat Ono', 'קריית אונו', ['kiryat ono', 'קריית אונו', 'קרית אונו']],
   ["Yizre'el", 'יזרעאל', ["yizre'el", 'yizreel', 'יזרעאל']],
   ['Central District', 'מרכז', ['מרכז']],
   ['Northern District', 'צפון', ['צפון']],
