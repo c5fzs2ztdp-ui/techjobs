@@ -6,6 +6,7 @@ import { X, RotateCcw } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useMobileDialogAccessibility } from "@/hooks/useDialogAccessibility";
 import { EMPTY_FILTERS, type Filters } from "./filters";
+import { REGION_LABELS } from "./jobsData";
 
 const jobCategories = [
   "software", "frontend", "devops", "data-science", "design", "product",
@@ -18,6 +19,8 @@ const workModels = ["remote", "hybrid", "on-site"];
 const employmentTypes = ["full-time", "part-time", "student", "intern", "temp", "contract"];
 
 const seniorities = ["intern", "junior", "senior", "staff", "principal", "lead", "manager"];
+
+const regions = Object.keys(REGION_LABELS);
 
 interface FilterSidebarProps {
   filters: Filters;
@@ -58,14 +61,16 @@ export default function FilterSidebar({
     filters.workModels.length +
     filters.employmentTypes.length +
     filters.seniorities.length +
-    filters.cities.length;
+    filters.cities.length +
+    filters.regions.length;
 
   const renderCheckboxList = (
     legend: string,
     values: string[],
     selected: string[],
     key: keyof Omit<Filters, 'search'>,
-    maxHeight = false
+    maxHeight = false,
+    labelFor: (v: string) => string = v => v.replace(/-/g, ' ')
   ) => (
     <fieldset>
       <legend className="font-medium text-sm text-warm-900 mb-3">{legend}</legend>
@@ -78,7 +83,7 @@ export default function FilterSidebar({
               onCheckedChange={() => toggleListFilter(key, value)}
             />
             <Label htmlFor={`${key}-${value}`} className="text-sm text-warm-600 capitalize cursor-pointer">
-              {value.replace(/-/g, ' ')}
+              {labelFor(value)}
             </Label>
           </div>
         ))}
@@ -119,6 +124,7 @@ export default function FilterSidebar({
       <ScrollArea className="flex-1">
         <div className="p-4 space-y-6" aria-labelledby="filter-heading">
           {renderCheckboxList("Job Category", jobCategories, filters.jobCategories, 'jobCategories', true)}
+          {renderCheckboxList("Region", regions, filters.regions, 'regions', false, v => REGION_LABELS[v] || v)}
           {renderCheckboxList("Work Model", workModels, filters.workModels, 'workModels')}
           {renderCheckboxList("Employment Type", employmentTypes, filters.employmentTypes, 'employmentTypes')}
           {renderCheckboxList("Seniority", seniorities, filters.seniorities, 'seniorities')}

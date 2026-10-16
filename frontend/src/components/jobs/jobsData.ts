@@ -29,6 +29,10 @@ export interface Job {
   lastRefreshAttemptAt: string | null;
   lastRefreshError: string | null;
   refreshState: string | null;
+  region: string | null;         // region slug (tel-aviv-gush-dan | sharon | center | shfela | jerusalem | haifa-krayot | north | south | negev | judea-samaria)
+  locationSource: 'city' | 'location' | 'title' | 'company-site' | null;
+  cities: string[];              // all canonical cities (multi-location jobs)
+  regions: string[];             // all regions matching `cities`
   // derived for the site
   cityHe: string | null;         // Hebrew display name when known
   job_category: string;          // role category derived from the title
@@ -45,6 +49,19 @@ export interface JobsPayload {
 export function displayCity(job: Job): string {
   return job.cityHe || job.city || job.location || '';
 }
+
+export const REGION_LABELS: Record<string, string> = {
+  'tel-aviv-gush-dan': 'תל אביב וגוש דן',
+  sharon: 'השרון',
+  center: 'מרכז',
+  shfela: 'שפלה',
+  jerusalem: 'ירושלים והסביבה',
+  'haifa-krayot': 'חיפה והקריות',
+  north: 'צפון',
+  south: 'דרום',
+  negev: 'נגב',
+  'judea-samaria': 'יהודה ושומרון',
+};
 
 export async function fetchJobsPayload(): Promise<JobsPayload> {
   const response = await fetch(JOBS_DATA_URL);

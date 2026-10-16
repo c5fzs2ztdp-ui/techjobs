@@ -178,10 +178,16 @@ export default function Jobs() {
         return false;
       }
 
-      // City filter (matches the displayed label or the canonical English city)
+      // Region filter (a job matches ANY of its regions)
+      if (filters.regions.length > 0 &&
+          !job.regions.some(r => filters.regions.includes(r))) {
+        return false;
+      }
+
+      // City filter (matches the displayed label or ANY of the job's cities)
       if (filters.cities.length > 0 &&
           !filters.cities.includes(displayCity(job)) &&
-          !filters.cities.includes(job.city || '')) {
+          !job.cities.some(c => filters.cities.includes(c))) {
         return false;
       }
 
@@ -225,7 +231,8 @@ export default function Jobs() {
     filters.workModels.length +
     filters.employmentTypes.length +
     filters.seniorities.length +
-    filters.cities.length;
+    filters.cities.length +
+    filters.regions.length;
 
   const isJobSaved = (job: Job) => savedJobs.some(s => s.url === job.url);
   const isJobApplied = (job: Job) => savedJobs.some(s => s.url === job.url && s.applied);
