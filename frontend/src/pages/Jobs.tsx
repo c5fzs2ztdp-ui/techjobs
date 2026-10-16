@@ -12,7 +12,7 @@ import { EMPTY_FILTERS, type Filters } from "@/components/jobs/filters";
 import SearchHeader from "@/components/jobs/SearchHeader";
 import JobCard from "@/components/jobs/JobCard";
 import JobsLoader from "@/components/jobs/JobsLoader";
-import { displayCity, fetchAllJobs, type Job } from "@/components/jobs/jobsData";
+import { displayCity, fetchAllJobs, fetchCityLabels, type Job } from "@/components/jobs/jobsData";
 import { savedJobsApi } from "@/api/storage";
 
 // Types for mutation results
@@ -137,10 +137,18 @@ export default function Jobs() {
   });
 
   // Extract unique cities from jobs
+  const { data: cityLabels = {} } = useQuery({
+    queryKey: ['cityLabels'],
+    queryFn: fetchCityLabels,
+    staleTime: 1000 * 60 * 5,
+  });
+
+  // City facet: canonical cities only (never raw location strings like
+  // "2 Locations"), labeled in Hebrew when known.
   const cities = useMemo(() => {
-    const citySet = new Set(jobs.map(job => displayCity(job)).filter(Boolean));
-    return Array.from(citySet).sort();
-  }, [jobs]);
+    const citySet = new Set(jobs.flatMap(job => job.cities));
+    return Array.from(citySet).sort((a, b) => (cityLabels[a] || a).localeCompare(cityLabels[b] || b));
+  }, [jobs, cityLabels]);
 
   // Filter jobs
   const filteredJobs = useMemo(() => {
@@ -184,9 +192,8 @@ export default function Jobs() {
         return false;
       }
 
-      // City filter (matches the displayed label or ANY of the job's cities)
+      // City filter (a job matches ANY of its canonical cities)
       if (filters.cities.length > 0 &&
-          !filters.cities.includes(displayCity(job)) &&
           !job.cities.some(c => filters.cities.includes(c))) {
         return false;
       }
@@ -299,6 +306,7 @@ export default function Jobs() {
           filters={filters}
           setFilters={setFilters}
           cities={cities}
+        cityLabels={cityLabels}
           isOpen={isFilterOpen}
           onClose={() => setIsFilterOpen(false)}
           isMobile={true}
@@ -308,6 +316,7 @@ export default function Jobs() {
           filters={filters}
           setFilters={setFilters}
           cities={cities}
+        cityLabels={cityLabels}
           isOpen={true}
           onClose={() => {}}
           isMobile={false}

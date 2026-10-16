@@ -42,6 +42,7 @@ export interface Job {
 export interface JobsPayload {
   updatedAt: string;
   count: number;
+  cityLabels?: Record<string, string>;
   jobs: Job[];
 }
 
@@ -69,6 +70,11 @@ export async function fetchJobsPayload(): Promise<JobsPayload> {
     throw new Error(`Failed to fetch jobs data (${response.status})`);
   }
   return (await response.json()) as JobsPayload;
+}
+
+export async function fetchCityLabels(): Promise<Record<string, string>> {
+  const payload = await fetchJobsPayload();
+  return payload.cityLabels || {};
 }
 
 export async function fetchAllJobs(): Promise<Job[]> {

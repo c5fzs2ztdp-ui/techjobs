@@ -73,7 +73,7 @@ const CITIES = [
 // Pre-compile matchers: plain substring or \bregex\b
 const CITY_MATCHERS = [];
 for (const [en, he, variants] of CITIES) {
-  for (const v of variants) {
+  for (const v of [en.toLowerCase(), ...variants]) {
     const isRegex = v.includes('\\b');
     CITY_MATCHERS.push({
       en, he,
@@ -170,6 +170,8 @@ const jobs = raw.map(j => {
 const payload = {
   updatedAt: new Date().toISOString(),
   count: jobs.length,
+  // canonical city -> display label (Hebrew where known) for the city facet
+  cityLabels: Object.fromEntries(CITIES.map(([en, he]) => [en, he])),
   jobs,
 };
 fs.mkdirSync(path.dirname(path.resolve(outputPath)), { recursive: true });
