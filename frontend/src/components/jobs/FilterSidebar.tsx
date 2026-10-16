@@ -26,6 +26,7 @@ interface FilterSidebarProps {
   filters: Filters;
   setFilters: React.Dispatch<React.SetStateAction<Filters>>;
   cities: string[];
+  cityLabels?: Record<string, string>;
   isOpen: boolean;
   onClose: () => void;
   isMobile: boolean;
@@ -35,6 +36,7 @@ export default function FilterSidebar({
   filters,
   setFilters,
   cities,
+  cityLabels = {},
   isOpen,
   onClose,
   isMobile
@@ -128,7 +130,7 @@ export default function FilterSidebar({
           {renderCheckboxList("Work Model", workModels, filters.workModels, 'workModels')}
           {renderCheckboxList("Employment Type", employmentTypes, filters.employmentTypes, 'employmentTypes')}
           {renderCheckboxList("Seniority", seniorities, filters.seniorities, 'seniorities')}
-          {cities.length > 0 && renderCheckboxList("City", cities, filters.cities, 'cities', true)}
+          {cities.length > 0 && renderCheckboxList("City", cities, filters.cities, 'cities', true, v => cityLabels[v] || v)}
         </div>
       </ScrollArea>
     </aside>
