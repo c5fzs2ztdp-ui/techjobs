@@ -5,6 +5,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { X, RotateCcw } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useMobileDialogAccessibility } from "@/hooks/useDialogAccessibility";
+import { EMPTY_FILTERS, type Filters } from "./filters";
 
 const jobCategories = [
   "software", "frontend", "devops", "data-science", "design", "product",
@@ -17,24 +18,6 @@ const workModels = ["remote", "hybrid", "on-site"];
 const employmentTypes = ["full-time", "part-time", "student", "intern", "temp", "contract"];
 
 const seniorities = ["intern", "junior", "senior", "staff", "principal", "lead", "manager"];
-
-export interface Filters {
-  search: string;
-  jobCategories: string[];
-  workModels: string[];
-  employmentTypes: string[];
-  seniorities: string[];
-  cities: string[];
-}
-
-export const EMPTY_FILTERS: Filters = {
-  search: '',
-  jobCategories: [],
-  workModels: [],
-  employmentTypes: [],
-  seniorities: [],
-  cities: []
-};
 
 interface FilterSidebarProps {
   filters: Filters;

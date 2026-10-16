@@ -7,7 +7,8 @@ import { Briefcase, ChevronLeft, ChevronRight, Building2 } from "lucide-react";
 import { Link, useLocation } from "react-router-dom";
 import { createPageUrl } from "@/utils";
 
-import FilterSidebar, { EMPTY_FILTERS, type Filters } from "@/components/jobs/FilterSidebar";
+import FilterSidebar from "@/components/jobs/FilterSidebar";
+import { EMPTY_FILTERS, type Filters } from "@/components/jobs/filters";
 import SearchHeader from "@/components/jobs/SearchHeader";
 import JobCard from "@/components/jobs/JobCard";
 import JobsLoader from "@/components/jobs/JobsLoader";
