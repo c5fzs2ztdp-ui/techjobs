@@ -1,0 +1,60 @@
+name: Publish jobs data
+
+# Pulls the latest data/jobs.json from the private techjob_map pipeline repo,
+# converts it into the site payload (full 21-field schema + derived
+# cityHe/job_category/updated), and commits it to this repo's `data` branch.
+# The frontend fetches that file from raw.githubusercontent.com, so data
+# updates never require a site redeploy.
+
+on:
+  schedule:
+    # 20 min after the techjob_map official-source refreshes (17 1,6,11,16,21 UTC)
+    - cron: '37 1,6,11,16,21 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out site repo (converter script)
+        uses: actions/checkout@v4
+        with:
+          path: site
+
+      - name: Check out techjob_map (data source)
+        uses: actions/checkout@v4
+        with:
+          repository: halleelyasaf/techjob_map
+          token: ${{ secrets.TECHJOB_MAP_PAT }}
+          path: techjob_map
+
+      - name: Convert jobs.json to site payload
+        run: node site/scripts/convert_jobs.mjs techjob_map/data/jobs.json site/public-data/jobs.json
+
+      - name: Publish to data branch
+        env:
+          PAT: ${{ secrets.TECHJOB_MAP_PAT }}
+        run: |
+          set -euo pipefail
+          rm -rf data-branch
+          git clone --depth 1 --branch data "https://x-access-token:${PAT}@github.com/${{ github.repository }}.git" data-branch 2>/dev/null || {
+            git clone --depth 1 "https://x-access-token:${PAT}@github.com/${{ github.repository }}.git" data-branch
+            cd data-branch
+            git checkout --orphan data
+            git rm -rf . >/dev/null 2>&1 || true
+            cd ..
+          }
+          cp site/public-data/jobs.json data-branch/jobs.json
+          cd data-branch
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add jobs.json
+          if git diff --cached --quiet; then
+            echo "No data change - nothing to publish"
+          else
+            git commit -m "Jobs data update: $(date -u +%Y-%m-%dT%H:%MZ)"
+            git push origin data
+          fi

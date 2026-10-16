@@ -224,12 +224,14 @@ export default function SavedJobs() {
                       <div className="flex justify-between items-start gap-4">
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center gap-2 mb-2 flex-wrap">
-                            <Badge
-                              variant="outline"
-                              className={`${levelColors[job.level || ''] || 'bg-warm-50 text-warm-700 border-warm-200'} text-xs`}
-                            >
-                              {job.level}
-                            </Badge>
+                            {job.level && (
+                              <Badge
+                                variant="outline"
+                                className={`${levelColors[job.level] || 'bg-warm-50 text-warm-700 border-warm-200'} text-xs capitalize`}
+                              >
+                                {job.level}
+                              </Badge>
+                            )}
                             {job.job_category && (
                               <Badge variant="outline" className="bg-iris-50 text-iris-700 border-iris-200 text-xs capitalize">
                                 {job.job_category.replace(/-/g, ' ')}

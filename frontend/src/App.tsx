@@ -3,7 +3,6 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { Toaster } from 'sonner';
 
 import Layout from '@/components/Layout';
-import ProtectedRoute from '@/components/ProtectedRoute';
 import AccessibilityWidget from '@/components/AccessibilityWidget';
 import Home from '@/pages/Home';
 import Jobs from '@/pages/Jobs';
@@ -41,9 +40,7 @@ function App() {
             path="/jobs"
             element={
               <Layout currentPageName="Jobs">
-                <ProtectedRoute>
-                  <Jobs />
-                </ProtectedRoute>
+                <Jobs />
               </Layout>
             }
           />

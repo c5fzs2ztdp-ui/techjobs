@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { fetchAllJobs } from "@/components/jobs/jobsData";
+import { displayCity, fetchAllJobs } from "@/components/jobs/jobsData";
 import { Link } from "react-router-dom";
 import { createPageUrl } from "@/utils";
 import { Button } from "@/components/ui/button";
@@ -40,17 +40,19 @@ export default function Companies() {
           categories: new Set(),
           sizes: new Set(),
           locations: new Set(),
-          latestUpdate: job.updated
+          latestUpdate: job.updated || ''
         });
       }
 
       const company = companyMap.get(normalizedName)!;
       company.jobs.push(job);
-      if (job.category) company.categories.add(job.category);
-      if (job.size) company.sizes.add(job.size);
-      if (job.city) company.locations.add(job.city);
-      if (new Date(job.updated) > new Date(company.latestUpdate)) {
-        company.latestUpdate = job.updated;
+      const city = displayCity(job);
+      if (city) company.locations.add(city);
+      if (job.department) company.categories.add(job.department);
+      const t = job.updated ? new Date(job.updated).getTime() : 0;
+      const cur = company.latestUpdate ? new Date(company.latestUpdate).getTime() : 0;
+      if (t > cur) {
+        company.latestUpdate = job.updated || '';
       }
     });
 
