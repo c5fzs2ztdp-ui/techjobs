@@ -101,8 +101,15 @@ export async function fetchCityLabels(): Promise<Record<string, string>> {
 export async function fetchAllJobs(): Promise<Job[]> {
   const payload = await fetchJobsPayload();
   const jobs = payload.jobs || [];
-  // Sort by updated date (newest first), undated jobs last
+  // English-titled jobs first, then Hebrew-titled; newest first within each
+  // group, undated jobs last inside their group.
+  const langGroup = (title: string | null): number => {
+    const m = (title || '').match(/[A-Za-zא-ת]/);
+    return m && /[א-ת]/.test(m[0]) ? 1 : 0;
+  };
   return jobs.sort((a, b) => {
+    const g = langGroup(a.title) - langGroup(b.title);
+    if (g !== 0) return g;
     const ta = a.updated ? new Date(a.updated).getTime() : 0;
     const tb = b.updated ? new Date(b.updated).getTime() : 0;
     return tb - ta;
