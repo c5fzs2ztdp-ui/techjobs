@@ -62,7 +62,6 @@ export default function AddCompanyModal({ open, onOpenChange }: AddCompanyModalP
     size: '',
     websiteUrl: '',
     careersUrl: '',
-    linkedinId: '',
     city: '',
     street: '',
     houseNumber: '',
@@ -79,7 +78,6 @@ export default function AddCompanyModal({ open, onOpenChange }: AddCompanyModalP
       size: formData.size,
       websiteUrl: formData.websiteUrl,
       careersUrl: formData.careersUrl,
-      linkedinId: formData.linkedinId || undefined,
       addresses: [
         {
           street: formData.street || undefined,
@@ -91,7 +89,6 @@ export default function AddCompanyModal({ open, onOpenChange }: AddCompanyModalP
       isActive: true
     };
     // Remove undefined values
-    if (!json.linkedinId) delete json.linkedinId;
     const addr = json.addresses as { street?: string; houseNumber?: string; city: string }[];
     if (!addr[0].street) delete addr[0].street;
     if (!addr[0].houseNumber) delete addr[0].houseNumber;
@@ -115,8 +112,9 @@ export default function AddCompanyModal({ open, onOpenChange }: AddCompanyModalP
   };
 
   const openGitHubPR = () => {
-    const prUrl = `https://github.com/mluggy/techmap/new/main/companies?filename=${formData.companyNumber}.json`;
-    window.open(prUrl, '_blank');
+    // The site runs exclusively on techjob_map data now; new companies are
+    // added there. Send contributors to the pipeline repo instead of techmap.
+    window.open('https://github.com/halleelyasaf/techjob_map', '_blank');
   };
 
   const resetForm = () => {
@@ -127,7 +125,6 @@ export default function AddCompanyModal({ open, onOpenChange }: AddCompanyModalP
       size: '',
       websiteUrl: '',
       careersUrl: '',
-      linkedinId: '',
       city: '',
       street: '',
       houseNumber: '',
@@ -244,16 +241,6 @@ export default function AddCompanyModal({ open, onOpenChange }: AddCompanyModalP
                   onChange={(e) => setFormData({ ...formData, careersUrl: e.target.value })}
                 />
               </div>
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="linkedinId">LinkedIn ID</Label>
-              <Input
-                id="linkedinId"
-                placeholder="e.g., acme-tech (not the full URL)"
-                value={formData.linkedinId}
-                onChange={(e) => setFormData({ ...formData, linkedinId: e.target.value })}
-              />
             </div>
 
             <div className="space-y-2">
