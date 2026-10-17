@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { fetchAllJobs, fetchCityLabels } from "@/components/jobs/jobsData";
+import { fetchJobsPayload, JOBS_PAYLOAD_QUERY_KEY, selectCityLabels, selectSortedJobs } from "@/components/jobs/jobsData";
 import { Link } from "react-router-dom";
 import { createPageUrl } from "@/utils";
 import { Button } from "@/components/ui/button";
@@ -13,9 +13,10 @@ export default function Companies() {
   const [searchQuery, setSearchQuery] = useState('');
 
   const { data: jobs = [], isLoading } = useQuery({
-    queryKey: ['jobs'],
-    queryFn: fetchAllJobs,
+    queryKey: JOBS_PAYLOAD_QUERY_KEY,
+    queryFn: fetchJobsPayload,
     staleTime: 1000 * 60 * 5, // 5 minutes
+    select: selectSortedJobs,
   });
 
   // Aggregate jobs by company
@@ -69,9 +70,10 @@ export default function Companies() {
   }, [jobs]);
 
   const { data: cityLabels = {} } = useQuery({
-    queryKey: ['cityLabels'],
-    queryFn: fetchCityLabels,
+    queryKey: JOBS_PAYLOAD_QUERY_KEY,
+    queryFn: fetchJobsPayload,
     staleTime: 1000 * 60 * 5,
+    select: selectCityLabels,
   });
 
   const filteredCompanies = useMemo(() => {

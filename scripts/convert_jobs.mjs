@@ -73,6 +73,47 @@ const CITIES = [
   ['Northern District', 'צפון', ['צפון']],
   ['Southern District', 'דרום', ['דרום']],
 ];
+
+// Canonical city -> region slug. One location registry: regions are DERIVED
+// from the canonical cities below, never assembled independently, so the
+// city and region filters can never disagree about a job.
+const CITY_REGION = {
+  'Tel Aviv': 'tel-aviv-gush-dan', 'Ramat Gan': 'tel-aviv-gush-dan', 'Givatayim': 'tel-aviv-gush-dan',
+  'Bnei Brak': 'tel-aviv-gush-dan', 'Holon': 'tel-aviv-gush-dan', 'Bat Yam': 'tel-aviv-gush-dan',
+  'Or Yehuda': 'tel-aviv-gush-dan', 'Kiryat Ono': 'tel-aviv-gush-dan',
+  'Herzliya': 'sharon', 'Ramat HaSharon': 'sharon', "Ra'anana": 'sharon', 'Kfar Saba': 'sharon',
+  'Hod HaSharon': 'sharon', 'Netanya': 'sharon', 'Kfar Netter': 'sharon', 'Shefayim': 'sharon',
+  'Caesarea': 'sharon', 'Magal': 'sharon',
+  'Petah Tikva': 'center', 'Rosh HaAyin': 'center', 'Yehud': 'center', "Modi'in": 'center',
+  'Ben Gurion Airport': 'center', 'Rishon LeZion': 'center', 'Central District': 'center',
+  'Rehovot': 'shfela', 'Ness Ziona': 'shfela', 'Yavne': 'shfela', 'Ramla': 'shfela', 'Lod': 'shfela',
+  'Beer Yaakov': 'shfela', 'Shfela': 'shfela',
+  'Jerusalem': 'jerusalem', 'Beit Shemesh': 'jerusalem',
+  'Haifa': 'haifa-krayot', 'Kiryat Bialik': 'haifa-krayot', 'Yokneam': 'haifa-krayot',
+  'Karmiel': 'north', 'Nazareth': 'north', 'Afula': 'north', 'Acre': 'north', 'Zefat': 'north',
+  'Kiryat Shmona': 'north', 'Tiberias': 'north', 'Katzrin': 'north', "Yizre'el": 'north',
+  'Migdal HaEmek': 'north', 'Ramat HaGolan': 'north', 'Dalton': 'north', "Sha'ar HaGolan": 'north',
+  'Beit HaEmek': 'north', 'Northern District': 'north',
+  'Ashdod': 'south', 'Ashkelon': 'south', 'Sderot': 'south', 'Kiryat Gat': 'south',
+  'Southern District': 'south',
+  'Beer Sheva': 'negev', 'Dimona': 'negev', 'Eilat': 'negev',
+  'Ariel': 'judea-samaria',
+};
+const REGION_SET = new Set([
+  'tel-aviv-gush-dan', 'sharon', 'center', 'shfela', 'jerusalem',
+  'haifa-krayot', 'north', 'south', 'negev', 'judea-samaria',
+]);
+
+// All regions matching the canonical cities, merged with any supported
+// explicit upstream annotations. This is the single location registry - the
+// city and region filters can never disagree about a job.
+export function deriveRegions(cities, regionsAnnotations, regionAnnotation) {
+  return [...new Set([
+    ...(Array.isArray(cities) ? cities : []).map(c => CITY_REGION[c]).filter(Boolean),
+    ...[...(Array.isArray(regionsAnnotations) ? regionsAnnotations : []), regionAnnotation]
+      .filter(r => REGION_SET.has(r)),
+  ])];
+}
 // Pre-compile matchers: plain substring or \bregex\b
 const CITY_MATCHERS = [];
 for (const [en, he, variants] of CITIES) {
@@ -162,6 +203,10 @@ if (!Array.isArray(raw)) { console.error('Input is not a JSON array'); process.e
 
 const jobs = raw.map(j => {
   const { city, cityHe } = normalizeCity(j.city || j.location);
+  const cities = [...new Set([...(Array.isArray(j.cities) ? j.cities : []), city].filter(Boolean))];
+  // Regions derive from every canonical city; explicit upstream annotations
+  // are merged only when they are supported region slugs.
+  const regions = deriveRegions(cities, j.regions, j.region);
   return {
     // full 21-field techjob_map schema, preserved
     company: j.company ?? null,
@@ -187,8 +232,8 @@ const jobs = raw.map(j => {
     refreshState: j.refreshState ?? null,
     region: j.region ?? null,
     locationSource: j.locationSource ?? null,
-    cities: [...new Set([...(Array.isArray(j.cities) ? j.cities : []), city].filter(Boolean))],
-    regions: [...new Set([...(Array.isArray(j.regions) ? j.regions : []), j.region].filter(Boolean))],
+    cities,
+    regions,
     // site-specific derived fields
     cityHe,
     job_category: deriveJobCategory(j.title, j.department),
@@ -197,6 +242,8 @@ const jobs = raw.map(j => {
 });
 
 const payload = {
+  // Versioned data contract with the frontend (jobsData.ts validates it).
+  schemaVersion: 1,
   updatedAt: new Date().toISOString(),
   count: jobs.length,
   // canonical city -> display label (Hebrew where known) for the city facet

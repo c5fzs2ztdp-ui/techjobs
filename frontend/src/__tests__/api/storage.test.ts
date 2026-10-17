@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { http, HttpResponse } from 'msw';
 import { server } from '../mocks/server';
-import { savedJobsApi, companiesApi } from '@/api/storage';
+import { savedJobsApi, companiesApi, reconcileGuestSavedJobs } from '@/api/storage';
 import { mockSavedJobs } from '../mocks/handlers';
 
 describe('savedJobsApi', () => {
@@ -297,5 +297,94 @@ describe('companiesApi', () => {
       expect(result.name).toBe('Brand New Corp');
       expect(result.id).toBeDefined();
     });
+  });
+});
+
+describe('reconcileGuestSavedJobs', () => {
+  beforeEach(() => {
+    localStorage.clear();
+  });
+
+  const guestJob = (over: Record<string, unknown> = {}) => ({
+    id: 'local-1',
+    job_title: 'Guest Job',
+    company: 'Guest Corp',
+    url: 'http://example.com/job-1',
+    applied: true,
+    applied_date: '2026-10-10',
+    comments: 'keep me',
+    created_date: '2026-10-09T00:00:00.000Z',
+    ...over,
+  });
+
+  it('uploads guest saves with applied dates/comments and clears local storage', async () => {
+    let received: Record<string, unknown> | null = null;
+    server.use(
+      http.post('/api/saved-jobs', async ({ request }) => {
+        const body = await request.json() as Record<string, unknown>;
+        received = body;
+        return HttpResponse.json({ id: 'server-1', ...body }, { status: 201 });
+      })
+    );
+    localStorage.setItem('techjobs_saved_jobs', JSON.stringify([guestJob()]));
+
+    await reconcileGuestSavedJobs();
+
+    expect(received).toMatchObject({
+      job_title: 'Guest Job',
+      company: 'Guest Corp',
+      url: 'http://example.com/job-1',
+      applied: true,
+      applied_date: '2026-10-10',
+      comments: 'keep me',
+    });
+    // guest ids/timestamps are not sent - the server assigns its own
+    expect(received).not.toHaveProperty('id');
+    expect(received).not.toHaveProperty('created_date');
+    expect(localStorage.getItem('techjobs_saved_jobs')).toBeNull();
+  });
+
+  it('treats a 409 as already-saved (dedupe by URL) and drops the local copy', async () => {
+    server.use(
+      http.post('/api/saved-jobs', () => {
+        return HttpResponse.json({ error: 'Already exists' }, { status: 409 });
+      })
+    );
+    localStorage.setItem('techjobs_saved_jobs', JSON.stringify([guestJob()]));
+
+    await reconcileGuestSavedJobs();
+
+    expect(localStorage.getItem('techjobs_saved_jobs')).toBeNull();
+  });
+
+  it('keeps records whose upload failed for the next attempt (retry-safe)', async () => {
+    let calls = 0;
+    server.use(
+      http.post('/api/saved-jobs', async ({ request }) => {
+        calls += 1;
+        const body = await request.json() as Record<string, unknown>;
+        if (body.url === 'http://example.com/job-2') {
+          return new HttpResponse(null, { status: 500 });
+        }
+        return HttpResponse.json({ id: `server-${calls}`, ...body }, { status: 201 });
+      })
+    );
+    localStorage.setItem('techjobs_saved_jobs', JSON.stringify([
+      guestJob(),
+      guestJob({ id: 'local-2', url: 'http://example.com/job-2' }),
+    ]));
+
+    await reconcileGuestSavedJobs();
+
+    const remaining = JSON.parse(localStorage.getItem('techjobs_saved_jobs') || '[]');
+    expect(remaining).toHaveLength(1);
+    expect(remaining[0].url).toBe('http://example.com/job-2');
+  });
+
+  it('does nothing when there are no guest saves', async () => {
+    let calls = 0;
+    server.use(http.post('/api/saved-jobs', () => { calls += 1; return new HttpResponse(null, { status: 201 }); }));
+    await reconcileGuestSavedJobs();
+    expect(calls).toBe(0);
   });
 });

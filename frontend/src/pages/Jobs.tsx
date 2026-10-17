@@ -12,7 +12,7 @@ import { EMPTY_FILTERS, type Filters } from "@/components/jobs/filters";
 import SearchHeader from "@/components/jobs/SearchHeader";
 import JobCard from "@/components/jobs/JobCard";
 import JobsLoader from "@/components/jobs/JobsLoader";
-import { displayCity, fetchAllJobs, fetchCityLabels, type Job } from "@/components/jobs/jobsData";
+import { displayCity, fetchJobsPayload, JOBS_PAYLOAD_QUERY_KEY, selectCityLabels, selectSortedJobs, type Job } from "@/components/jobs/jobsData";
 import { savedJobsApi } from "@/api/storage";
 
 // Types for mutation results
@@ -32,16 +32,11 @@ export default function Jobs() {
 
   const [searchQuery, setSearchQuery] = useState(initialSearch);
 
-  // Apply category/city from URL on mount
+  // Apply category/city from URL on mount. Categories are role-category
+  // slugs from the jobs taxonomy (see CATEGORY_LABELS in jobsData).
   useEffect(() => {
-    // Legacy homepage industry links used names, not role slugs.
-    const LEGACY_CATEGORY_SLUGS: Record<string, string> = {
-      'AI/ML': 'data-ai', 'Cybersecurity': 'security', 'Gaming': 'software',
-      'Health': 'other', 'Fintech': 'finance', 'Aerospace': 'hardware-electronics',
-    };
-    const initialCategory = LEGACY_CATEGORY_SLUGS[initialCategoryParam] || initialCategoryParam;
-    if (initialCategory) {
-      setFilters(prev => ({ ...prev, jobCategories: [initialCategory] }));
+    if (initialCategoryParam) {
+      setFilters(prev => ({ ...prev, jobCategories: [initialCategoryParam] }));
     }
     if (initialCity) {
       setFilters(prev => ({ ...prev, cities: [initialCity] }));
@@ -61,9 +56,10 @@ export default function Jobs() {
   const queryClient = useQueryClient();
 
   const { data: jobs = [], isLoading } = useQuery({
-    queryKey: ['jobs'],
-    queryFn: fetchAllJobs,
+    queryKey: JOBS_PAYLOAD_QUERY_KEY,
+    queryFn: fetchJobsPayload,
     staleTime: 1000 * 60 * 5, // 5 minutes
+    select: selectSortedJobs,
   });
 
   const { data: savedJobs = [] } = useQuery({
@@ -144,9 +140,10 @@ export default function Jobs() {
 
   // Extract unique cities from jobs
   const { data: cityLabels = {} } = useQuery({
-    queryKey: ['cityLabels'],
-    queryFn: fetchCityLabels,
+    queryKey: JOBS_PAYLOAD_QUERY_KEY,
+    queryFn: fetchJobsPayload,
     staleTime: 1000 * 60 * 5,
+    select: selectCityLabels,
   });
 
   // City facet: canonical cities only (never raw location strings like
