@@ -118,3 +118,42 @@ describe('freshness helpers', () => {
     expect(isNewToday({ ...base, firstSeenAt: 'not-a-date' })).toBe(false);
   });
 });
+
+describe('adversarial payload hardening', () => {
+  it('strips bidi control characters from titles, optional fields, arrays and city labels', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => payloadResponse({
+      schemaVersion: 1,
+      cityLabels: { 'Tel Aviv': 'תל אביב\u202E!' },
+      jobs: [{
+        company: 'A', title: 'Senior \u202EEngineer', url: 'https://x/1', job_category: 'software',
+        city: 'Tel\u200FAviv', technologies: ['Re\u202Dact'], cities: ['Tel Aviv'], regions: [],
+      }],
+    })));
+    const payload = await fetchJobsPayload();
+    expect(payload.jobs[0].title).toBe('Senior Engineer');
+    expect(payload.jobs[0].city).toBe('TelAviv');
+    expect(payload.jobs[0].technologies).toEqual(['React']);
+    expect(payload.cityLabels?.['Tel Aviv']).toBe('תל אביב!');
+  });
+
+  it('accepts an empty feed without error', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => payloadResponse({ schemaVersion: 1, jobs: [] })));
+    const payload = await fetchJobsPayload();
+    expect(payload.jobs).toEqual([]);
+  });
+
+  it('survives prototype-pollution-shaped and giant-string records', async () => {
+    const giant = 'x'.repeat(200_000);
+    vi.stubGlobal('fetch', vi.fn(async () => payloadResponse({
+      schemaVersion: 1,
+      jobs: [
+        JSON.parse('{ "company": "A", "title": "T", "url": "https://x/1", "job_category": "software", "__proto__": { "polluted": true } }'),
+        { company: 'B', title: giant, url: 'https://x/2', job_category: 'software', technologies: Array(5000).fill('t') },
+      ],
+    })));
+    const payload = await fetchJobsPayload();
+    expect(payload.jobs).toHaveLength(2);
+    expect(({} as Record<string, unknown>).polluted).toBeUndefined();
+    expect(payload.jobs[1].title).toHaveLength(200_000);
+  });
+});
