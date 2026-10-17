@@ -5,7 +5,7 @@ export const JOBS_DATA_URL =
   (import.meta.env.VITE_JOBS_DATA_URL as string) ||
   'https://raw.githubusercontent.com/c5fzs2ztdp-ui/techjobs/data/jobs.json';
 
-// Full techjob_map 21-field schema plus site-specific derived fields.
+// Renderer-facing fields from the techjob_map 21-field schema (ops/provenance fields stay in the dataset) plus site-specific derived fields.
 export interface Job {
   company: string;
   title: string;
@@ -19,18 +19,10 @@ export interface Job {
   seniority: 'intern' | 'junior' | 'senior' | 'staff' | 'principal' | 'lead' | 'manager' | null;
   technologies: string[];
   postedAt: string | null;
-  jobId: string | null;
-  jobCode: string | null;
-  source: string | null;
-  verification: string | null;
-  verifiedAt: string | null;
   firstSeenAt: string | null;
   closedAt: string | null;       // set when the row is a closed tombstone (refreshState 'closed')
-  lastRefreshAttemptAt: string | null;
-  lastRefreshError: string | null;
   refreshState: string | null;
   region: string | null;         // region slug (tel-aviv-gush-dan | sharon | center | shfela | jerusalem | haifa-krayot | north | south | negev | judea-samaria)
-  locationSource: 'city' | 'location' | 'title' | 'company-site' | null;
   cities: string[];              // all canonical cities (multi-location jobs)
   regions: string[];             // all regions matching `cities`
   // derived for the site
@@ -117,9 +109,8 @@ const REQUIRED_JOB_STRING_FIELDS = ['company', 'title', 'url', 'job_category'] a
 // invalid React child).
 const OPTIONAL_STRING_FIELDS = [
   'location', 'city', 'department', 'description', 'employmentType', 'workModel',
-  'seniority', 'postedAt', 'jobId', 'jobCode', 'source', 'verification',
-  'verifiedAt', 'firstSeenAt', 'closedAt', 'lastRefreshAttemptAt',
-  'lastRefreshError', 'refreshState', 'region', 'locationSource', 'cityHe', 'updated',
+  'seniority', 'postedAt', 'firstSeenAt', 'closedAt', 'refreshState', 'region',
+  'cityHe', 'updated',
 ] as const;
 
 function stringArray(value: unknown): string[] {
