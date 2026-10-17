@@ -12,10 +12,11 @@ import CompanyCard from "@/components/companies/CompanyCard";
 export default function Companies() {
   const [searchQuery, setSearchQuery] = useState('');
 
-  const { data: jobs = [], isLoading } = useQuery({
+  const { data: jobs = [], isLoading, isError, refetch } = useQuery({
     queryKey: JOBS_PAYLOAD_QUERY_KEY,
     queryFn: fetchJobsPayload,
     staleTime: 1000 * 60 * 5, // 5 minutes
+    retry: 2,
     select: (payload) => selectSortedJobs(payload).filter(j => !isClosed(j)),
   });
 
@@ -133,6 +134,18 @@ export default function Companies() {
             {[...Array(6)].map((_, i) => (
               <div key={i} className="h-48 bg-warm-200 rounded-xl animate-pulse" />
             ))}
+          </div>
+        ) : isError ? (
+          <div className="text-center py-16" role="alert">
+            <p className="text-lg font-medium text-warm-700 mb-2">Companies could not be loaded</p>
+            <p className="text-warm-500 mb-4">The live feed did not respond. Check your connection and try again.</p>
+            <button
+              type="button"
+              onClick={() => refetch()}
+              className="px-4 py-2 rounded-lg bg-iris-600 text-white hover:bg-iris-700 transition-colors"
+            >
+              Retry
+            </button>
           </div>
         ) : (
           <>
