@@ -516,3 +516,13 @@ describe('corrupt localStorage resilience', () => {
     await expect(savedJobsApi.list()).resolves.toEqual([]);
   });
 });
+
+describe('guest create dedupe', () => {
+  it('a second guest save of the same URL returns the existing record instead of duplicating', async () => {
+    server.use(http.post('/api/saved-jobs', () => new HttpResponse(null, { status: 401 })));
+    const first = await savedJobsApi.create({ job_title: 'T', company: 'C', url: 'http://example.com/dup', applied: false, applied_date: null, comments: '', created_date: '', job_category: 'software' } as never);
+    const second = await savedJobsApi.create({ job_title: 'T', company: 'C', url: 'http://example.com/dup', applied: false, applied_date: null, comments: '', created_date: '', job_category: 'software' } as never);
+    expect(second.id).toBe(first.id);
+    expect(JSON.parse(localStorage.getItem('techjobs_saved_jobs') || '[]')).toHaveLength(1);
+  });
+});
