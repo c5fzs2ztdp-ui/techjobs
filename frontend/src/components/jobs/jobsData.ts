@@ -1,8 +1,6 @@
-// Job data for TechJobsIL - sourced exclusively from the techjob_map pipeline
-// (halleelyasaf/techjob_map). A scheduled workflow in this repo converts the
-// latest data/jobs.json into the payload on the `data` branch; the frontend
-// fetches it straight from raw.githubusercontent.com, so data updates never
-// require a site redeploy.
+// Job data for TechJobsIL. The frontend fetches a JSON payload (produced by
+// scripts/convert_jobs.mjs) straight from a plain URL - see VITE_JOBS_DATA_URL
+// in the README - so data updates never require a site redeploy.
 export const JOBS_DATA_URL =
   (import.meta.env.VITE_JOBS_DATA_URL as string) ||
   'https://raw.githubusercontent.com/c5fzs2ztdp-ui/techjobs/data/jobs.json';
@@ -86,12 +84,32 @@ export const CATEGORY_LABELS: Record<string, string> = {
   other: 'Other',
 };
 
-export async function fetchJobsPayload(): Promise<JobsPayload> {
-  const response = await fetch(JOBS_DATA_URL);
-  if (!response.ok) {
-    throw new Error(`Failed to fetch jobs data (${response.status})`);
+let inflightPayload: Promise<JobsPayload> | null = null;
+
+export function fetchJobsPayload(): Promise<JobsPayload> {
+  // Share one in-flight request so concurrent callers (jobs list, city
+  // labels) don't each fetch and parse the whole payload. Settled promises
+  // are cleared so react-query refetches still hit the network.
+  if (!inflightPayload) {
+    inflightPayload = (async () => {
+      const response = await fetch(JOBS_DATA_URL);
+      if (!response.ok) {
+        throw new Error(`Failed to fetch jobs data (${response.status})`);
+      }
+      const payload = (await response.json()) as JobsPayload;
+      // Normalize at the fetch boundary so renderers can trust the arrays.
+      const jobs = (payload.jobs || []).map((j) => ({
+        ...j,
+        technologies: Array.isArray(j.technologies) ? j.technologies : [],
+        cities: Array.isArray(j.cities) ? j.cities : [],
+        regions: Array.isArray(j.regions) ? j.regions : [],
+      }));
+      return { ...payload, jobs };
+    })().finally(() => {
+      inflightPayload = null;
+    });
   }
-  return (await response.json()) as JobsPayload;
+  return inflightPayload;
 }
 
 export async function fetchCityLabels(): Promise<Record<string, string>> {

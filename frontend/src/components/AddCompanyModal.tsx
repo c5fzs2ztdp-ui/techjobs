@@ -112,14 +112,16 @@ export default function AddCompanyModal({ open, onOpenChange }: AddCompanyModalP
   };
 
   const openGitHubPR = () => {
-    // New company submissions go to this repo's public issue tracker so any
-    // visitor can reach it (the pipeline repo is private).
-    window.open(
+    // Submissions go to the configured destination's issue tracker as a
+    // prefilled issue carrying the generated company JSON - a public path
+    // that actually reaches the feed publisher. noopener keeps the
+    // destination from accessing window.opener.
+    const base =
       (import.meta.env.VITE_SUBMIT_COMPANY_URL as string) ||
-        'https://github.com/c5fzs2ztdp-ui/techjobs/issues',
-      '_blank',
-      'noopener'
-    );
+      'https://github.com/c5fzs2ztdp-ui/techjobs';
+    const title = encodeURIComponent(`Add company: ${formData.name}`);
+    const body = encodeURIComponent('```json\n' + generateJson() + '\n```');
+    window.open(`${base}/issues/new?title=${title}&body=${body}`, '_blank', 'noopener');
   };
 
   const resetForm = () => {
@@ -150,7 +152,7 @@ export default function AddCompanyModal({ open, onOpenChange }: AddCompanyModalP
             Add a Company to TechJobsIL
           </DialogTitle>
           <DialogDescription>
-            Submit your company to be listed on TechJobsIL. This will create a pull request on GitHub.
+            Submit your company to be listed on TechJobsIL. This opens a prefilled GitHub issue for the maintainers.
           </DialogDescription>
         </DialogHeader>
 
@@ -273,7 +275,7 @@ export default function AddCompanyModal({ open, onOpenChange }: AddCompanyModalP
             </div>
 
             <Button type="submit" className="w-full bg-indigo-600 hover:bg-indigo-700">
-              Generate JSON for PR
+              Generate company JSON
             </Button>
           </form>
         ) : (
@@ -302,10 +304,9 @@ export default function AddCompanyModal({ open, onOpenChange }: AddCompanyModalP
             <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 text-sm text-amber-800">
               <p className="font-medium mb-2">Next steps:</p>
               <ol className="list-decimal list-inside space-y-1">
-                <li>Copy the JSON above</li>
-                <li>Click "Open GitHub" to create a new file</li>
-                <li>Paste the JSON content</li>
-                <li>Propose the change as a Pull Request</li>
+                <li>Review the generated JSON</li>
+                <li>Click "Open GitHub" to open a prefilled issue</li>
+                <li>Submit the issue - the maintainers review it from there</li>
               </ol>
             </div>
 
