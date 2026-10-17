@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { displayCity, fetchAllJobs, type Job } from "@/components/jobs/jobsData";
+import { displayCity, fetchJobsPayload, JOBS_PAYLOAD_QUERY_KEY, selectSortedJobs, type Job } from "@/components/jobs/jobsData";
 import { Link } from "react-router-dom";
 import { createPageUrl } from "@/utils";
 import { Button } from "@/components/ui/button";
@@ -22,9 +22,10 @@ export default function CompanyProfile() {
   const queryClient = useQueryClient();
 
   const { data: jobs = [], isLoading: isJobsLoading } = useQuery({
-    queryKey: ['jobs'],
-    queryFn: fetchAllJobs,
+    queryKey: JOBS_PAYLOAD_QUERY_KEY,
+    queryFn: fetchJobsPayload,
     staleTime: 1000 * 60 * 5, // 5 minutes
+    select: selectSortedJobs,
   });
 
   const { data: savedJobs = [] } = useQuery({

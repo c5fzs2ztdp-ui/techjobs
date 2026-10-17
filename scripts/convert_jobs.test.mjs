@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { deriveJobCategory } from './convert_jobs.mjs';
+import { deriveJobCategory, deriveRegions } from './convert_jobs.mjs';
 
 // Regression: Strauss screenshot cases - Hebrew titles must never default to software.
 test('strauss HR recruiting manager -> hr', () => {
@@ -90,4 +90,24 @@ test('remote-mentioned location keeps real city', async () => {
   assert.equal(normalizeCity('Tel Aviv / Remote').city, 'Tel Aviv');
   assert.equal(normalizeCity('Remote or Haifa').city, 'Haifa');
   assert.equal(normalizeCity('Remote').city, null);
+});
+
+// Regions derive from every canonical city - a multi-city job appears under
+// every matching region filter (Nati round-2 finding).
+test('regions derive from all canonical cities', () => {
+  assert.deepEqual(
+    deriveRegions(['Tel Aviv', 'Haifa'], ['tel-aviv-gush-dan'], 'tel-aviv-gush-dan'),
+    ['tel-aviv-gush-dan', 'haifa-krayot'],
+  );
+});
+
+// Rows without upstream annotations still get a region from a known city.
+test('city-only row still lands in a region filter', () => {
+  assert.deepEqual(deriveRegions(['Herzliya'], null, null), ['sharon']);
+});
+
+// Unsupported annotations are dropped, not passed through.
+test('unsupported region annotations are dropped', () => {
+  assert.deepEqual(deriveRegions(['Haifa'], ['narnia'], 'middle-earth'), ['haifa-krayot']);
+  assert.deepEqual(deriveRegions([], ['narnia'], null), []);
 });

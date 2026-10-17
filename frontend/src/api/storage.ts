@@ -200,6 +200,54 @@ export const savedJobsApi = {
   }
 };
 
+/**
+ * Upload guest saves/applies to the account before the UI switches to
+ * account storage. Retry-safe: the server deduplicates by URL (a 409 counts
+ * as uploaded), applied dates/comments are preserved, and records whose
+ * upload failed stay in localStorage for the next reconciliation attempt.
+ */
+export async function reconcileGuestSavedJobs(): Promise<void> {
+  const local = getLocalJobs();
+  if (local.length === 0) return;
+  const remaining: SavedJob[] = [];
+  for (const job of local) {
+    try {
+      // The server assigns its own id/created_date; everything else
+      // (including applied state, dates and comments) is preserved.
+      const record: Omit<SavedJob, 'id' | 'created_date'> = {
+        job_title: job.job_title,
+        company: job.company,
+        category: job.category,
+        city: job.city,
+        url: job.url,
+        level: job.level,
+        size: job.size,
+        job_category: job.job_category,
+        applied: job.applied,
+        applied_date: job.applied_date,
+        comments: job.comments,
+      };
+      const response = await fetch(`${API_BASE_URL}/saved-jobs`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify(record),
+      });
+      // 2xx: uploaded. 409: the account already has this URL - dedupe, drop the copy.
+      if (!response.ok && response.status !== 409) {
+        remaining.push(job);
+      }
+    } catch {
+      remaining.push(job); // network failure - keep for next time
+    }
+  }
+  if (remaining.length === 0) {
+    localStorage.removeItem(SAVED_JOBS_KEY);
+  } else {
+    setLocalJobs(remaining);
+  }
+}
+
 // Company operations
 export const companiesApi = {
   list: async (): Promise<Company[]> => {

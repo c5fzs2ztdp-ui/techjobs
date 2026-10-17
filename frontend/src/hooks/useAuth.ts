@@ -2,6 +2,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { usePostHog } from 'posthog-js/react';
 import { useEffect } from 'react';
 import { authApi, type AuthState } from '@/api/auth';
+import { reconcileGuestSavedJobs } from '@/api/storage';
 
 export function useAuth() {
   const queryClient = useQueryClient();
@@ -21,8 +22,19 @@ export function useAuth() {
         email: authState.user.email,
         name: authState.user.name,
       });
-      // Invalidate savedJobs to fetch fresh data from DB after login
-      queryClient.invalidateQueries({ queryKey: ['savedJobs'] });
+      // Reconcile guest saves into the account first, then switch the
+      // visible list to account storage - otherwise guest saves vanish.
+      let cancelled = false;
+      reconcileGuestSavedJobs()
+        .catch((error) => console.error('Guest save reconciliation failed:', error))
+        .finally(() => {
+          if (!cancelled) {
+            queryClient.invalidateQueries({ queryKey: ['savedJobs'] });
+          }
+        });
+      return () => {
+        cancelled = true;
+      };
     }
   }, [authState, posthog, queryClient]);
 

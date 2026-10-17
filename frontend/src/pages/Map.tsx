@@ -1,12 +1,12 @@
-import { useEffect, useState, useMemo } from "react";
+import { useEffect, useMemo } from "react";
 import { Link } from "react-router-dom";
 import { createPageUrl } from "@/utils";
 import { Building2, Briefcase, Loader2, AlertCircle } from "lucide-react";
 import { MapContainer, TileLayer, Marker, Popup, useMap } from "react-leaflet";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
-import { fetchAllJobs } from "@/components/jobs/jobsData";
-import type { Job } from "@/components/jobs/jobsData";
+import { useQuery } from "@tanstack/react-query";
+import { fetchJobsPayload, JOBS_PAYLOAD_QUERY_KEY, selectSortedJobs } from "@/components/jobs/jobsData";
 
 // Israeli city coordinates - English and Hebrew names
 const CITY_COORDS: Record<string, [number, number]> = {
@@ -263,22 +263,13 @@ function FitBounds({ cities }: { cities: CityData[] }) {
 }
 
 export default function Map() {
-  const [jobs, setJobs] = useState<Job[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    fetchAllJobs()
-      .then((data) => {
-        setJobs(data);
-        setLoading(false);
-      })
-      .catch((err) => {
-        console.error('Failed to load jobs:', err);
-        setError('Failed to load job data. Please try again later.');
-        setLoading(false);
-      });
-  }, []);
+  const { data: jobs = [], isLoading: loading, isError } = useQuery({
+    queryKey: JOBS_PAYLOAD_QUERY_KEY,
+    queryFn: fetchJobsPayload,
+    staleTime: 1000 * 60 * 5, // 5 minutes
+    select: selectSortedJobs,
+  });
+  const error = isError ? 'Failed to load job data. Please try again later.' : null;
 
   // Aggregate jobs by city
   const cityData = useMemo(() => {

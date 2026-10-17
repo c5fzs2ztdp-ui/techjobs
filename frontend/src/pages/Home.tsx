@@ -1,6 +1,6 @@
 import { useState, useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { fetchJobsPayload } from "@/components/jobs/jobsData";
+import { fetchJobsPayload, JOBS_PAYLOAD_QUERY_KEY } from "@/components/jobs/jobsData";
 import { Link, useNavigate } from "react-router-dom";
 import { createPageUrl } from "@/utils";
 import { Button } from "@/components/ui/button";
@@ -11,10 +11,10 @@ import {
   Building2,
   Search,
   ArrowRight,
+  Code2,
   Cpu,
   Shield,
-  Gamepad2,
-  HeartPulse,
+  Server,
   Coins,
   Rocket,
   Plus,
@@ -22,32 +22,44 @@ import {
 import { motion } from "framer-motion";
 import AddCompanyModal from "@/components/AddCompanyModal";
 
-// Industry cards link to the closest role-category slug in the jobs taxonomy.
+// Role-category cards link to role-category slugs in the jobs taxonomy
+// (CATEGORY_LABELS in jobsData) - labels and destinations are the same
+// concept, so no industry/occupation conflation.
 const categories = [
-  { name: "AI/ML", slug: "data-ai", icon: Cpu, color: "from-violet-500 to-purple-600" },
-  { name: "Cybersecurity", slug: "security", icon: Shield, color: "from-emerald-500 to-teal-600" },
-  { name: "Gaming", slug: "software", icon: Gamepad2, color: "from-pink-500 to-rose-600" },
-  { name: "Health", slug: "other", icon: HeartPulse, color: "from-red-500 to-orange-600" },
-  { name: "Fintech", slug: "finance", icon: Coins, color: "from-amber-500 to-yellow-600" },
-  { name: "Aerospace", slug: "hardware-electronics", icon: Rocket, color: "from-blue-500 to-cyan-600" },
+  { name: "Software", slug: "software", icon: Code2, color: "from-pink-500 to-rose-600" },
+  { name: "Data & AI", slug: "data-ai", icon: Cpu, color: "from-violet-500 to-purple-600" },
+  { name: "Security", slug: "security", icon: Shield, color: "from-emerald-500 to-teal-600" },
+  { name: "DevOps & Infrastructure", slug: "devops", icon: Server, color: "from-blue-500 to-cyan-600" },
+  { name: "Product", slug: "product", icon: Rocket, color: "from-indigo-500 to-blue-600" },
+  { name: "Finance", slug: "finance", icon: Coins, color: "from-amber-500 to-yellow-600" },
 ];
 
 const FALLBACK_STATS = { jobs: "2,500+", companies: "500+", cities: "50+" };
 
 export default function Home() {
   const { data: payload } = useQuery({
-    queryKey: ['jobsPayload'],
+    queryKey: JOBS_PAYLOAD_QUERY_KEY,
     queryFn: fetchJobsPayload,
     staleTime: 1000 * 60 * 5,
   });
+  // Branch on payload availability, not on the numeric counts: after a
+  // successful load the real values render (including zero); the marketing
+  // fallback shows only while loading or after an error.
   const stats = useMemo(() => {
-    const jobs = payload?.jobs || [];
+    if (!payload) {
+      return [
+        { label: "Active Jobs", value: FALLBACK_STATS.jobs, icon: Briefcase },
+        { label: "Tech Companies", value: FALLBACK_STATS.companies, icon: Building2 },
+        { label: "Cities Covered", value: FALLBACK_STATS.cities, icon: MapPin },
+      ];
+    }
+    const jobs = payload.jobs || [];
     const companies = new Set(jobs.map(j => j.company)).size;
     const cities = new Set(jobs.flatMap(j => j.cities || [])).size;
     return [
-      { label: "Active Jobs", value: jobs.length ? jobs.length.toLocaleString() : FALLBACK_STATS.jobs, icon: Briefcase },
-      { label: "Tech Companies", value: companies ? companies.toLocaleString() : FALLBACK_STATS.companies, icon: Building2 },
-      { label: "Cities Covered", value: cities ? String(cities) : FALLBACK_STATS.cities, icon: MapPin },
+      { label: "Active Jobs", value: jobs.length.toLocaleString(), icon: Briefcase },
+      { label: "Tech Companies", value: companies.toLocaleString(), icon: Building2 },
+      { label: "Cities Covered", value: String(cities), icon: MapPin },
     ];
   }, [payload]);
   const navigate = useNavigate();
@@ -151,10 +163,10 @@ export default function Home() {
       <div className="max-w-7xl mx-auto px-4 py-20">
         <div className="text-center mb-12">
           <h2 className="text-3xl md:text-4xl font-bold text-warm-900 mb-4">
-            Browse by Industry
+            Browse by Role
           </h2>
           <p className="text-lg text-warm-600 max-w-2xl mx-auto">
-            From AI and Cybersecurity to Gaming and Fintech — find your niche
+            From software engineering to data science, find your role
           </p>
         </div>
 

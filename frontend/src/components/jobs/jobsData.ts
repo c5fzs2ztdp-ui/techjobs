@@ -41,6 +41,8 @@ export interface Job {
 export interface JobsPayload {
   updatedAt: string;
   count: number;
+  /** Versioned contract with the publisher (scripts/convert_jobs.mjs). */
+  schemaVersion?: number;
   cityLabels?: Record<string, string>;
   jobs: Job[];
 }
@@ -84,6 +86,55 @@ export const CATEGORY_LABELS: Record<string, string> = {
   other: 'Other',
 };
 
+// The payload is published independently of the frontend deploy, so it is
+// validated at the fetch boundary: a structurally incompatible response is
+// rejected, and job records missing required renderer fields are dropped
+// (with a warning) instead of crashing a card at render time.
+export const JOBS_PAYLOAD_SCHEMA_VERSION = 1;
+
+const REQUIRED_JOB_STRING_FIELDS = ['company', 'title', 'url', 'job_category'] as const;
+
+export function parseJobsPayload(raw: unknown): JobsPayload {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {
+    throw new Error('Incompatible jobs payload: expected an object envelope');
+  }
+  const envelope = raw as Record<string, unknown>;
+  if (
+    envelope.schemaVersion !== undefined &&
+    envelope.schemaVersion !== JOBS_PAYLOAD_SCHEMA_VERSION
+  ) {
+    throw new Error(`Unsupported jobs payload schemaVersion: ${String(envelope.schemaVersion)}`);
+  }
+  if (!Array.isArray(envelope.jobs)) {
+    throw new Error('Incompatible jobs payload: missing jobs array');
+  }
+  const jobs: Job[] = [];
+  let dropped = 0;
+  for (const record of envelope.jobs) {
+    const valid =
+      record !== null &&
+      typeof record === 'object' &&
+      REQUIRED_JOB_STRING_FIELDS.every(
+        (f) => typeof (record as Record<string, unknown>)[f] === 'string',
+      );
+    if (!valid) {
+      dropped += 1;
+      continue;
+    }
+    const j = record as Job;
+    jobs.push({
+      ...j,
+      technologies: Array.isArray(j.technologies) ? j.technologies : [],
+      cities: Array.isArray(j.cities) ? j.cities : [],
+      regions: Array.isArray(j.regions) ? j.regions : [],
+    });
+  }
+  if (dropped > 0) {
+    console.warn(`Jobs payload: dropped ${dropped} record(s) missing required fields`);
+  }
+  return { ...(envelope as unknown as JobsPayload), jobs };
+}
+
 let inflightPayload: Promise<JobsPayload> | null = null;
 
 export function fetchJobsPayload(): Promise<JobsPayload> {
@@ -96,15 +147,7 @@ export function fetchJobsPayload(): Promise<JobsPayload> {
       if (!response.ok) {
         throw new Error(`Failed to fetch jobs data (${response.status})`);
       }
-      const payload = (await response.json()) as JobsPayload;
-      // Normalize at the fetch boundary so renderers can trust the arrays.
-      const jobs = (payload.jobs || []).map((j) => ({
-        ...j,
-        technologies: Array.isArray(j.technologies) ? j.technologies : [],
-        cities: Array.isArray(j.cities) ? j.cities : [],
-        regions: Array.isArray(j.regions) ? j.regions : [],
-      }));
-      return { ...payload, jobs };
+      return parseJobsPayload(await response.json());
     })().finally(() => {
       inflightPayload = null;
     });
@@ -112,25 +155,40 @@ export function fetchJobsPayload(): Promise<JobsPayload> {
   return inflightPayload;
 }
 
-export async function fetchCityLabels(): Promise<Record<string, string>> {
-  const payload = await fetchJobsPayload();
+/** Shared react-query key for the payload. Every page derives its view from
+ *  this one cache entry (via select), so navigating between Home, Jobs,
+ *  Companies and the map never refetches or reparses the same snapshot. */
+export const JOBS_PAYLOAD_QUERY_KEY = ['jobsPayload'] as const;
+
+export function selectCityLabels(payload: JobsPayload): Record<string, string> {
   return payload.cityLabels || {};
 }
 
-export async function fetchAllJobs(): Promise<Job[]> {
-  const payload = await fetchJobsPayload();
-  const jobs = payload.jobs || [];
+export function sortJobs(jobs: Job[]): Job[] {
   // English-titled jobs first, then Hebrew-titled; newest first within each
-  // group, undated jobs last inside their group.
+  // group, undated jobs last inside their group. Copies before sorting - the
+  // cached payload is shared across pages and must not be mutated.
   const langGroup = (title: string | null): number => {
     const m = (title || '').match(/[A-Za-zא-ת]/);
     return m && /[א-ת]/.test(m[0]) ? 1 : 0;
   };
-  return jobs.sort((a, b) => {
+  return [...jobs].sort((a, b) => {
     const g = langGroup(a.title) - langGroup(b.title);
     if (g !== 0) return g;
     const ta = a.updated ? new Date(a.updated).getTime() : 0;
     const tb = b.updated ? new Date(b.updated).getTime() : 0;
     return tb - ta;
   });
+}
+
+export function selectSortedJobs(payload: JobsPayload): Job[] {
+  return sortJobs(payload.jobs || []);
+}
+
+export async function fetchCityLabels(): Promise<Record<string, string>> {
+  return selectCityLabels(await fetchJobsPayload());
+}
+
+export async function fetchAllJobs(): Promise<Job[]> {
+  return selectSortedJobs(await fetchJobsPayload());
 }
