@@ -204,6 +204,30 @@ const CITY_COORDS: Record<string, [number, number]> = {
   "יבנה": [31.8786, 34.7394],
 
   // Default/Remote
+  // Additional canonical cities (must stay complete with the converter taxonomy)
+  "Ramat HaSharon": [32.1461, 34.8394],
+  "Kiryat Ono": [32.0630, 34.8553],
+  "Yehud": [32.0314, 34.8876],
+  "Beer Yaakov": [31.9442, 34.8328],
+  "Ness Ziona": [31.9321, 34.8013],
+  "Ben Gurion Airport": [32.0055, 34.8854],
+  "Migdal HaEmek": [32.6760, 35.2399],
+  "Kiryat Shmona": [33.2073, 35.5697],
+  "Zefat": [32.9646, 35.4960],
+  "Ariel": [32.1047, 35.1710],
+  "Katzrin": [33.0054, 35.8087],
+  "Shefayim": [32.2168, 34.8210],
+  "Beit HaEmek": [32.9714, 35.1434],
+  "Ramat HaGolan": [32.9979, 35.6956],
+  "Dalton": [33.0173, 35.4883],
+  "Kfar Netter": [32.1829, 34.8708],
+  "Magal": [32.3853, 35.0353],
+  "Central District": [31.9500, 34.8833],
+  "Northern District": [32.8000, 35.3000],
+  "Southern District": [31.2500, 34.8500],
+  "Shfela": [31.8167, 34.8167],
+  "Yizre'el": [32.5617, 35.3239],
+  "Sha'ar HaGolan": [32.6870, 35.6034],
   "Israel": [31.5, 34.75],
   "Remote": [31.5, 34.75],
   "ישראל": [31.5, 34.75],
@@ -235,6 +259,25 @@ const createCustomIcon = (count: number) => {
     iconAnchor: [size / 2, size / 2],
   });
 };
+
+// Exact (case-insensitive) match first; the substring fallback picks the
+// longest matching key so "Or Yehuda" never resolves to "Yehud".
+function findCityCoords(city: string): [number, number] | null {
+  const needle = city.toLowerCase();
+  for (const [name, c] of Object.entries(CITY_COORDS)) {
+    if (name.toLowerCase() === needle) return c;
+  }
+  let best: [number, number] | null = null;
+  let bestLen = -1;
+  for (const [name, c] of Object.entries(CITY_COORDS)) {
+    const key = name.toLowerCase();
+    if ((needle.includes(key) || key.includes(needle)) && key.length > bestLen) {
+      best = c;
+      bestLen = key.length;
+    }
+  }
+  return best;
+}
 
 interface CityData {
   city: string;
@@ -285,14 +328,7 @@ export default function Map() {
       seen.add(city);
 
       // Find matching city coords
-      let coords: [number, number] | null = null;
-      for (const [name, c] of Object.entries(CITY_COORDS)) {
-        if (city.toLowerCase().includes(name.toLowerCase()) ||
-            name.toLowerCase().includes(city.toLowerCase())) {
-          coords = c;
-          break;
-        }
-      }
+      const coords = findCityCoords(city);
 
       if (!coords) continue; // Skip unknown cities
 
@@ -308,14 +344,7 @@ export default function Map() {
     const processedCoords: Record<string, CityData> = {};
 
     Object.entries(cityMap).forEach(([city, data]: [string, CityMapEntry]) => {
-      let coords: [number, number] = CITY_COORDS["Israel"];
-      for (const [name, c] of Object.entries(CITY_COORDS)) {
-        if (city.toLowerCase().includes(name.toLowerCase()) ||
-            name.toLowerCase().includes(city.toLowerCase())) {
-          coords = c;
-          break;
-        }
-      }
+      const coords = findCityCoords(city) ?? CITY_COORDS["Israel"];
 
       const coordKey = coords.join(",");
       const existing = processedCoords[coordKey];
