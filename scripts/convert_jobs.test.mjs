@@ -1,6 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { deriveJobCategory, deriveRegions } from './convert_jobs.mjs';
+import fs from 'node:fs';
+import { deriveJobCategory, deriveRegions, normalizeCity } from './convert_jobs.mjs';
 
 // Regression: Strauss screenshot cases - Hebrew titles must never default to software.
 test('strauss HR recruiting manager -> hr', () => {
@@ -128,4 +129,18 @@ test('automation contexts: manufacturing/hardware vs QA', () => {
   assert.equal(deriveJobCategory('QA Automation Engineer', null), 'qa');
   assert.equal(deriveJobCategory('Test Automation Engineer', null), 'qa');
   assert.equal(deriveJobCategory('Automation Engineer', null), 'other'); // ambiguous - never forced into QA
+});
+
+test('every region-mapped city round-trips through normalizeCity with a Hebrew label', () => {
+  // Guards the CITIES port against drifting from the region registry:
+  // a region-mapped city the matcher does not know emits city: null in the feed.
+  const src = fs.readFileSync(new URL('./convert_jobs.mjs', import.meta.url), 'utf8');
+  const regionBlock = src.match(/const CITY_REGION = \{([\s\S]*?)\n\};/)[1];
+  const keys = [...regionBlock.matchAll(/'([^']+)': '[a-z-]+'/g)].map(m => m[1]);
+  assert.ok(keys.length > 40, 'expected the full region registry');
+  for (const key of keys) {
+    const { city, cityHe } = normalizeCity(key);
+    assert.equal(city, key, `${key} must round-trip to its canonical name`);
+    assert.ok(cityHe, `${key} must have a Hebrew label`);
+  }
 });
