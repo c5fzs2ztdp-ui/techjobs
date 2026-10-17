@@ -498,3 +498,21 @@ describe('savedJobsApi.delete on a pending local record', () => {
     await expect(savedJobsApi.delete('server-9')).resolves.toBe(false);
   });
 });
+
+describe('corrupt localStorage resilience', () => {
+  it('a corrupt saved-jobs blob backs itself up and starts clean instead of throwing', async () => {
+    localStorage.setItem('techjobs_saved_jobs', '{not json!!');
+    server.use(http.get('/api/saved-jobs', () => new HttpResponse(null, { status: 401 })));
+
+    await expect(savedJobsApi.list()).resolves.toEqual([]);
+
+    expect(localStorage.getItem('techjobs_saved_jobs')).toBeNull();
+    expect(localStorage.getItem('techjobs_saved_jobs_corrupt_backup')).toBe('{not json!!');
+  });
+
+  it('a non-array saved-jobs blob is treated as empty', async () => {
+    localStorage.setItem('techjobs_saved_jobs', '{"oops":1}');
+    server.use(http.get('/api/saved-jobs', () => new HttpResponse(null, { status: 401 })));
+    await expect(savedJobsApi.list()).resolves.toEqual([]);
+  });
+});
