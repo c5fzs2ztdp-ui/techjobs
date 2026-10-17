@@ -4,6 +4,7 @@
 // fetches it straight from raw.githubusercontent.com, so data updates never
 // require a site redeploy.
 export const JOBS_DATA_URL =
+  (import.meta.env.VITE_JOBS_DATA_URL as string) ||
   'https://raw.githubusercontent.com/c5fzs2ztdp-ui/techjobs/data/jobs.json';
 
 // Full techjob_map 21-field schema plus site-specific derived fields.
