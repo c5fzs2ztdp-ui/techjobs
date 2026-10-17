@@ -179,3 +179,15 @@ test('leadership titles -> management, not other', () => {
   assert.equal(deriveJobCategory('Chief Architect', null), 'management');
   assert.equal(deriveJobCategory('ראש צוות פיתוח', null), 'management');
 });
+
+// Substring city matching must not fire inside longer words (deep-review pass 4).
+test('city matching uses word boundaries for ASCII names and aliases', () => {
+  assert.equal(normalizeCity('Lodging Manager').city, null);
+  assert.equal(normalizeCity('holonistic').city, null);
+  assert.equal(normalizeCity('Acreage Holdings').city, null);
+  assert.equal(normalizeCity('Yavneel').city, null);
+  assert.equal(normalizeCity('Lod').city, 'Lod');
+  assert.equal(normalizeCity('Yokneam, Haifa District, Israel').city, 'Yokneam'); // longest name wins over the district
+  assert.equal(normalizeCity('Ramat-Gan (Tel-Aviv area), IL').city, 'Ramat Gan');
+  assert.equal(normalizeCity('ירושלים').city, 'Jerusalem'); // Hebrew stays substring
+});

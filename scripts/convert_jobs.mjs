@@ -117,19 +117,27 @@ export function deriveRegions(cities, regionsAnnotations, regionAnnotation) {
       .filter(r => REGION_SET.has(r)),
   ])];
 }
-// Pre-compile matchers: plain substring or \bregex\b
+// Pre-compile matchers. The canonical name and plain ASCII aliases match on
+// word boundaries ("Lodging" is not Lod, "holonistic" is not Holon); Hebrew
+// aliases stay substring because JS \b does not see non-ASCII letters as
+// word chars. Longest name wins, regex or not - keep PORT in sync with
+// techjob_map lib/cities.mjs.
+const escapeRe = (v) => v.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 const CITY_MATCHERS = [];
 for (const [en, he, variants] of CITIES) {
-  for (const v of [en.toLowerCase(), ...variants]) {
+  CITY_MATCHERS.push({ en, he, len: en.length, test: new RegExp(`\\b${escapeRe(en)}\\b`, 'i'), needle: null });
+  for (const v of variants) {
     const isRegex = v.includes('\\b');
+    const asciiPlain = !isRegex && /^[\x20-\x7E]+$/.test(v);
     CITY_MATCHERS.push({
       en, he,
-      test: isRegex ? new RegExp(v, 'i') : null,
-      needle: isRegex ? null : v.toLowerCase(),
+      len: v.replace(/\\b/g, '').length,
+      test: isRegex ? new RegExp(v, 'i') : asciiPlain ? new RegExp(`\\b${escapeRe(v)}\\b`, 'i') : null,
+      needle: isRegex || asciiPlain ? null : v.toLowerCase(),
     });
   }
 }
-CITY_MATCHERS.sort((a, b) => (b.needle?.length ?? 8) - (a.needle?.length ?? 8));
+CITY_MATCHERS.sort((a, b) => b.len - a.len);
 
 const NON_CITY = /^\s*(il(,\s*il)?|home( office)?|israel(,\s*il)?|\d+ locations?|various locations.*|multiple locations|remote|israel wide|all israel|hybrid)\s*$/i;
 const JUNK_CITY = /https?:\/\/|www\.|\.co(m)?\b|careers/i;
