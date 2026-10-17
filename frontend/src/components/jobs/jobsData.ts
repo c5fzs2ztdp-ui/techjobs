@@ -1,8 +1,6 @@
-// Job data for TechJobsIL - sourced exclusively from the techjob_map pipeline
-// (halleelyasaf/techjob_map). A scheduled workflow in this repo converts the
-// latest data/jobs.json into the payload on the `data` branch; the frontend
-// fetches it straight from raw.githubusercontent.com, so data updates never
-// require a site redeploy.
+// Job data for TechJobsIL. The frontend fetches a JSON payload (produced by
+// scripts/convert_jobs.mjs) straight from a plain URL - see VITE_JOBS_DATA_URL
+// in the README - so data updates never require a site redeploy.
 export const JOBS_DATA_URL =
   (import.meta.env.VITE_JOBS_DATA_URL as string) ||
   'https://raw.githubusercontent.com/c5fzs2ztdp-ui/techjobs/data/jobs.json';

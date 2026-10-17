@@ -20,13 +20,14 @@ import {
 import { motion } from "framer-motion";
 import AddCompanyModal from "@/components/AddCompanyModal";
 
+// Industry cards link to the closest role-category slug in the jobs taxonomy.
 const categories = [
-  { name: "AI/ML", icon: Cpu, color: "from-violet-500 to-purple-600" },
-  { name: "Cybersecurity", icon: Shield, color: "from-emerald-500 to-teal-600" },
-  { name: "Gaming", icon: Gamepad2, color: "from-pink-500 to-rose-600" },
-  { name: "Health", icon: HeartPulse, color: "from-red-500 to-orange-600" },
-  { name: "Fintech", icon: Coins, color: "from-amber-500 to-yellow-600" },
-  { name: "Aerospace", icon: Rocket, color: "from-blue-500 to-cyan-600" },
+  { name: "AI/ML", slug: "data-ai", icon: Cpu, color: "from-violet-500 to-purple-600" },
+  { name: "Cybersecurity", slug: "security", icon: Shield, color: "from-emerald-500 to-teal-600" },
+  { name: "Gaming", slug: "software", icon: Gamepad2, color: "from-pink-500 to-rose-600" },
+  { name: "Health", slug: "other", icon: HeartPulse, color: "from-red-500 to-orange-600" },
+  { name: "Fintech", slug: "finance", icon: Coins, color: "from-amber-500 to-yellow-600" },
+  { name: "Aerospace", slug: "hardware-electronics", icon: Rocket, color: "from-blue-500 to-cyan-600" },
 ];
 
 const stats = [
@@ -39,8 +40,8 @@ export default function Home() {
   const navigate = useNavigate();
   const [showAddCompany, setShowAddCompany] = useState(false);
 
-  const handleCategoryClick = (categoryName: string) => {
-    navigate(`${createPageUrl("Jobs")}?category=${encodeURIComponent(categoryName)}`);
+  const handleCategoryClick = (categorySlug: string) => {
+    navigate(`${createPageUrl("Jobs")}?category=${encodeURIComponent(categorySlug)}`);
   };
 
   return (
@@ -154,7 +155,7 @@ export default function Home() {
             >
               <Card
                 className="group cursor-pointer hover:shadow-xl transition-all duration-300 overflow-hidden border-0 bg-white rounded-2xl card-hover"
-                onClick={() => handleCategoryClick(category.name)}
+                onClick={() => handleCategoryClick(category.slug)}
               >
                 <CardContent className="p-6 text-center">
                   <div className={`w-14 h-14 mx-auto mb-4 rounded-2xl bg-gradient-to-br ${category.color} flex items-center justify-center transform group-hover:scale-110 transition-transform`}>
