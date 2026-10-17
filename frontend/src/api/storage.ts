@@ -38,9 +38,23 @@ const SAVED_JOBS_KEY = 'techjobs_saved_jobs';
 const COMPANIES_KEY = 'techjobs_companies';
 
 // LocalStorage helpers
+function readLocalJson<T>(key: string): T[] {
+  const data = localStorage.getItem(key);
+  if (!data) return [];
+  try {
+    const parsed = JSON.parse(data);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    // A corrupt blob must not break every saved-jobs operation; back it up
+    // for debugging and start clean.
+    try { localStorage.setItem(`${key}_corrupt_backup`, data); } catch { /* quota */ }
+    localStorage.removeItem(key);
+    return [];
+  }
+}
+
 function getLocalJobs(): SavedJob[] {
-  const data = localStorage.getItem(SAVED_JOBS_KEY);
-  return data ? JSON.parse(data) : [];
+  return readLocalJson<SavedJob>(SAVED_JOBS_KEY);
 }
 
 function setLocalJobs(jobs: SavedJob[]): void {
@@ -48,8 +62,7 @@ function setLocalJobs(jobs: SavedJob[]): void {
 }
 
 function getLocalCompanies(): Company[] {
-  const data = localStorage.getItem(COMPANIES_KEY);
-  return data ? JSON.parse(data) : [];
+  return readLocalJson<Company>(COMPANIES_KEY);
 }
 
 function setLocalCompanies(companies: Company[]): void {

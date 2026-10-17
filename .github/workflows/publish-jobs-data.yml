@@ -1,7 +1,7 @@
 name: Publish jobs data
 
 # Pulls the latest data/jobs.json from the private techjob_map pipeline repo,
-# converts it into the site payload (full 21-field schema + derived
+# converts it into the site payload (renderer-facing fields from the 21-field schema + derived
 # cityHe/job_category/updated), and commits it to this repo's `data` branch.
 # The frontend fetches that file from raw.githubusercontent.com, so data
 # updates never require a site redeploy.
@@ -41,7 +41,7 @@ jobs:
           set -euo pipefail
           rm -rf data-branch
           git clone --depth 1 --branch data "https://x-access-token:${PAT}@github.com/${{ github.repository }}.git" data-branch 2>/dev/null || {
-            git clone --depth 1 "https://x-access-token:${PAT}@github.com/${{ github.repository }}.git" data-branch
+            git clone --depth 1 "https://x-access-token:${PAT}@github.com/${{ github.repository }}.git" data-branch 2>/dev/null
             cd data-branch
             git checkout --orphan data
             git rm -rf . >/dev/null 2>&1 || true

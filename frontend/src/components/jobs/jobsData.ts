@@ -113,8 +113,17 @@ const OPTIONAL_STRING_FIELDS = [
   'cityHe', 'updated',
 ] as const;
 
+// Bidi control characters can visually spoof rendered text (e.g. an RTL
+// override reversing a title). They never belong in job data; strip them at
+// the boundary rather than at every render site.
+const BIDI_CONTROLS = /[\u200E\u200F\u202A-\u202E\u2066-\u2069]/g;
+
+function cleanString(value: string): string {
+  return value.replace(BIDI_CONTROLS, '');
+}
+
 function stringArray(value: unknown): string[] {
-  return Array.isArray(value) ? value.filter((x): x is string => typeof x === 'string') : [];
+  return Array.isArray(value) ? value.filter((x): x is string => typeof x === 'string').map(cleanString) : [];
 }
 
 export function parseJobsPayload(raw: unknown): JobsPayload {
@@ -145,9 +154,12 @@ export function parseJobsPayload(raw: unknown): JobsPayload {
       continue;
     }
     const rec: Record<string, unknown> = { ...(record as Record<string, unknown>) };
+    for (const f of REQUIRED_JOB_STRING_FIELDS) {
+      rec[f] = cleanString(rec[f] as string);
+    }
     for (const f of OPTIONAL_STRING_FIELDS) {
       const v = rec[f];
-      rec[f] = typeof v === 'string' && v !== '' ? v : null;
+      rec[f] = typeof v === 'string' && v !== '' ? cleanString(v) : null;
     }
     rec.technologies = stringArray(rec.technologies);
     rec.cities = stringArray(rec.cities);
@@ -162,9 +174,9 @@ export function parseJobsPayload(raw: unknown): JobsPayload {
   const cityLabels: Record<string, string> =
     rawCityLabels && typeof rawCityLabels === 'object' && !Array.isArray(rawCityLabels)
       ? Object.fromEntries(
-          Object.entries(rawCityLabels).filter(
-            (entry): entry is [string, string] => typeof entry[1] === 'string',
-          ),
+          Object.entries(rawCityLabels)
+            .filter((entry): entry is [string, string] => typeof entry[1] === 'string')
+            .map(([k, v]) => [k, cleanString(v)]),
         )
       : {};
   return { ...(envelope as unknown as JobsPayload), cityLabels, jobs };
