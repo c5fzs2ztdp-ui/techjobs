@@ -168,3 +168,14 @@ test('every region-mapped city round-trips through normalizeCity with a Hebrew l
     assert.ok(cityHe, `${key} must have a Hebrew label`);
   }
 });
+
+// Leadership titles without a functional keyword classify as management
+// rather than falling through to other (deep-review finding).
+test('leadership titles -> management, not other', () => {
+  assert.equal(deriveJobCategory('Engineering Director', null), 'management');
+  assert.equal(deriveJobCategory('Global Art Director', null), 'management');
+  assert.equal(deriveJobCategory('Team Lead - Browser Security (JavaScript)', null), 'management');
+  assert.equal(deriveJobCategory('R&D Team Lead', null), 'management');
+  assert.equal(deriveJobCategory('Chief Architect', null), 'management');
+  assert.equal(deriveJobCategory('ראש צוות פיתוח', null), 'management');
+});

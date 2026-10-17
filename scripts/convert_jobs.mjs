@@ -179,7 +179,7 @@ const TITLE_RULES = [
   ['operations-logistics', /operations|supply chain|logistics|warehouse|procurement|inventory|shipping|fleet|facilities|\bdriver\b|order management|לוגיסטיק|רכש|קניין|מחסנא|מחסן|אחסנה|הפצה|הובלה|שרשרת אספקה|תפעול|מלאי|מלגז|נהג/],
   ['admin', /administra|office manager|executive assistant|personal assistant|receptionist|secretary|clerical|אדמיניסטר|מזכיר|משרדי|פקיד|(^|[^א-ת])רכז(?=[\/ ]|$)/],
   ['software', /software|full.?stack|back.?end|front.?end|web (developer|engineer)|mobile (developer|engineer)|android (developer|engineer)|\bios (developer|engineer)|application (developer|engineer)|\bsw (engineer|developer)|c\+\+|\bjava\b|\bpython\b|\bgolang\b|\brust\b|\bkotlin\b|\bscala\b|\bphp\b|\bruby on rails\b|dotnet|\.net (developer|engineer)|\bc#\b|linux kernel|macos|\bsap\b|מתכנת|תוכנה|פיתוח תוכנה|מפתח\/?\.?ת?|פולסטאק/],
-  ['management', /vice president|\bvp\b|general manager|managing director|director of|head of|group manager|department manager|project manager|program manager|\bpmo\b|delivery manager|scrum master|engineering manager|\bmanager\b|מנהל|ראש מחלקה|ראש תחום|סמנכ"ל|מנכ"ל|סגן נשיא/],
+  ['management', /vice president|\bvp\b|general manager|managing director|\bdirector\b|\bchief\b|\bteam lead\b|\btech(nical)? lead\b|\bgroup lead\b|ראש צוות|head of|group manager|department manager|project manager|program manager|\bpmo\b|delivery manager|scrum master|engineering manager|\bmanager\b|מנהל|ראש מחלקה|ראש תחום|סמנכ"ל|מנכ"ל|סגן נשיא/],
 ];
 // Department is a strong signal when the title alone did not classify (EN + HE).
 const DEPT_RULES = [
