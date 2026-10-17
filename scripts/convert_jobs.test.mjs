@@ -135,3 +135,11 @@ test('closedAt passes through the converter', async () => {
     fs.rmSync(tmp, { recursive: true, force: true });
   }
 });
+
+// The general account-manager sales rule must not shadow the specific
+// Technical Account Manager support rule (Nati round-3 finding).
+test('Technical Account Manager -> customer-support, not sales', () => {
+  assert.equal(deriveJobCategory('Technical Account Manager', null), 'customer-support');
+  assert.equal(deriveJobCategory('Team Lead, Technical Account Manager', null), 'customer-support');
+  assert.equal(deriveJobCategory('Account Manager', null), 'sales'); // general rule still works
+});

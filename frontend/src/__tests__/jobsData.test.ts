@@ -46,6 +46,19 @@ describe('fetchJobsPayload normalization', () => {
     expect(jobs[0].company).toBe('B');
   });
 
+  it('normalizes malformed optional fields instead of crashing renderers', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => payloadResponse({
+      schemaVersion: 1,
+      jobs: [
+        { company: 'A', title: 'Engineer', url: 'https://x/1', job_category: 'software', employmentType: 7, technologies: [{ name: 'React' }], cities: ['Tel Aviv', 42] },
+      ],
+    })));
+    const [job] = await fetchAllJobs();
+    expect(job.employmentType).toBeNull();
+    expect(job.technologies).toEqual([]);
+    expect(job.cities).toEqual(['Tel Aviv']);
+  });
+
   it('does not mutate the shared payload when sorting', async () => {
     const payload = {
       schemaVersion: 1,
