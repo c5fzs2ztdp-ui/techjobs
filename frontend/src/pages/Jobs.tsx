@@ -389,6 +389,7 @@ export default function Jobs() {
                       size="sm"
                       onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
                       disabled={currentPage === 1}
+                      aria-label="Previous page" 
                       className="px-2 sm:px-3"
                     >
                       <ChevronLeft className="w-4 h-4" />
@@ -401,6 +402,8 @@ export default function Jobs() {
                           variant={currentPage === pageNum ? "default" : "outline"}
                           size="sm"
                           onClick={() => setCurrentPage(pageNum)}
+                          aria-label={`Page ${pageNum}`}
+                          aria-current={currentPage === pageNum ? "page" : undefined}
                           className={`min-w-[36px] ${currentPage === pageNum ? "bg-iris-600" : ""}`}
                         >
                           {pageNum}
@@ -413,6 +416,7 @@ export default function Jobs() {
                       size="sm"
                       onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
                       disabled={currentPage === totalPages}
+                      aria-label="Next page" 
                       className="px-2 sm:px-3"
                     >
                       <ChevronRight className="w-4 h-4" />
