@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Link } from "react-router-dom";
 import { createPageUrl } from "@/utils";
@@ -17,13 +17,15 @@ import {
   Circle,
   MessageSquare,
   Pencil,
+  RefreshCw,
   X
 } from "lucide-react";
 import { toast } from "sonner";
 import { motion, AnimatePresence } from "framer-motion";
 import { Textarea } from "@/components/ui/textarea";
 import { format } from "date-fns";
-import { savedJobsApi, type SavedJob } from "@/api/storage";
+import { reconcileGuestSavedJobs, savedJobsApi, type SavedJob } from "@/api/storage";
+import { useAuth } from "@/hooks/useAuth";
 
 const levelColors: Record<string, string> = {
   intern: 'bg-green-50 text-green-700 border-green-200',
@@ -48,6 +50,22 @@ export default function SavedJobs() {
     queryFn: () => savedJobsApi.list('-created_date'),
     staleTime: 30 * 1000, // Cache for 30 seconds
     refetchOnWindowFocus: true,
+  });
+
+  // Pending guest records (failed reconciliation uploads) stay visible in
+  // the list; retry the sync whenever this page is opened signed in.
+  const { isAuthenticated } = useAuth();
+  useEffect(() => {
+    if (!isAuthenticated) return;
+    reconcileGuestSavedJobs().finally(() => {
+      queryClient.invalidateQueries({ queryKey: ['savedJobs'] });
+    });
+  }, [isAuthenticated, queryClient]);
+
+  const pendingCount = savedJobs.filter(j => j.pending).length;
+  const retrySync = useMutation({
+    mutationFn: () => reconcileGuestSavedJobs(),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['savedJobs'] }),
   });
 
   const filteredJobs = savedJobs.filter(job => {
@@ -135,6 +153,24 @@ export default function SavedJobs() {
               </div>
             </div>
           </div>
+
+          {pendingCount > 0 && (
+            <div className="mt-4 flex items-center justify-between gap-3 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3" role="status">
+              <p className="text-sm text-amber-800">
+                {pendingCount} saved {pendingCount === 1 ? 'job has' : 'jobs have'} not synced to your account yet.
+              </p>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => retrySync.mutate()}
+                disabled={retrySync.isPending}
+                className="gap-1.5"
+              >
+                <RefreshCw className={`w-4 h-4 ${retrySync.isPending ? 'animate-spin' : ''}`} />
+                Retry sync
+              </Button>
+            </div>
+          )}
 
           {/* Filter Tabs */}
           {savedJobs.length > 0 && (
@@ -227,6 +263,11 @@ export default function SavedJobs() {
                       <div className="flex justify-between items-start gap-4">
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center gap-2 mb-2 flex-wrap">
+                            {job.pending && (
+                              <Badge variant="outline" className="bg-amber-50 text-amber-700 border-amber-200 text-xs">
+                                Not synced yet
+                              </Badge>
+                            )}
                             {job.level && (
                               <Badge
                                 variant="outline"

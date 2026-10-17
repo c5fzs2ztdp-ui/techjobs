@@ -143,3 +143,13 @@ test('Technical Account Manager -> customer-support, not sales', () => {
   assert.equal(deriveJobCategory('Team Lead, Technical Account Manager', null), 'customer-support');
   assert.equal(deriveJobCategory('Account Manager', null), 'sales'); // general rule still works
 });
+
+// Generic automation-engineer must not swallow manufacturing/hardware
+// automation titles (Nati round-4 finding); explicit QA/SDET still match.
+test('automation contexts: manufacturing/hardware vs QA', () => {
+  assert.equal(deriveJobCategory('Manufacturing Automation Engineer', null), 'mechanical-manufacturing');
+  assert.equal(deriveJobCategory('Senior VLSI CAD and AI Automation Engineer', null), 'hardware-electronics');
+  assert.equal(deriveJobCategory('QA Automation Engineer', null), 'qa');
+  assert.equal(deriveJobCategory('Test Automation Engineer', null), 'qa');
+  assert.equal(deriveJobCategory('Automation Engineer', null), 'other'); // ambiguous - never forced into QA
+});

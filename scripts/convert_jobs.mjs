@@ -155,7 +155,11 @@ const TITLE_RULES = [
   // specific professions first (order matters, first match wins)
   ['hr', /\bhr\b|\bhrbp\b|human resources|recruit|talent (acquisition|sourc|partner)|people (operations|partner)|משאבי אנוש|כוח אדם|גיוס|מגייס/],
   ['product', /product (manager|owner|lead|management)|group product|\bcpo\b|מנהל\/?\.?ת? מוצר|אחראי\/?\.?ת? מוצר/],
-  ['qa', /\bqa\b|quality assurance|\bsdet\b|test automation|automation engineer|\btest(s|ing)? engineer|בדיקות תוכנה|בודק\/?\.?ת? תוכנה/],
+  // Explicit manufacturing/hardware automation contexts come before the
+  // generic automation QA match (and before the \bai\b data-ai match).
+  ['mechanical-manufacturing', /manufacturing automation|industrial automation/],
+  ['hardware-electronics', /\b(vlsi|asic|fpga|silicon|cad|chip)\b[^,]*automation|automation[^,]*\b(vlsi|asic|fpga|silicon|cad|chip)\b/],
+  ['qa', /\bqa\b|quality assurance|\bsdet\b|test automation|automation (test|testing)|\btest(s|ing)? engineer|בדיקות תוכנה|בודק\/?\.?ת? תוכנה/],
   ['security', /cyber|infosec|appsec|devsecops|product security|security (engineer|researcher?|architect|analyst|consultant|expert)|penetration test|malware|vulnerabilit|threat (prevention|intelligence|hunt)|incident response|endpoint (security|protection|research)|סייבר|אבטחת מידע|אבטחת מערכות/],
   ['devops', /devops|\bsre\b|site reliability|platform engineer|infrastructure engineer|finops|cloud (engineer|architect)|systems? administrator|\bsysadmin|network engineer|\bit (engineer|manager|specialist)|דבאופס|תשתיות (מחשוב|מידע|טכנולוג)|מנהל\/?\.?ת? מערכת|סיסטם/],
   ['data-ai', /data scien|data engineer|data analy|machine learning|deep learning|artificial intelligence|\bmlops\b|\bml (engineer|researcher)|\bai\b|data platform|algorithm|research scien|computer vision|\bnlp\b|big data|business intelligence|\bbi (developer|analyst|engineer)|דאטה|נתונים|למידת מכונה|בינה מלאכותית|אלגוריתמ/],

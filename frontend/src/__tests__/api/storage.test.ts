@@ -430,6 +430,40 @@ describe('reconcileGuestSavedJobs', () => {
     expect(remaining[0].url).toBe('http://example.com/job-2');
   });
 
+  it('preserves saves and edits created while an upload was in flight', async () => {
+    let resolvePost: (() => void) | null = null;
+    server.use(
+      http.post('/api/saved-jobs', async () => {
+        await new Promise<void>((resolve) => { resolvePost = resolve; });
+        return HttpResponse.json({ id: 'server-1' }, { status: 201 });
+      })
+    );
+    localStorage.setItem('techjobs_saved_jobs', JSON.stringify([guestJob()]));
+
+    const done = reconcileGuestSavedJobs();
+    await new Promise((r) => setTimeout(r, 20)); // let the POST get in flight
+    // a new save lands while the upload is pending
+    const local = JSON.parse(localStorage.getItem('techjobs_saved_jobs') || '[]');
+    local.push(guestJob({ id: 'local-2', url: 'http://example.com/job-2' }));
+    localStorage.setItem('techjobs_saved_jobs', JSON.stringify(local));
+    resolvePost!();
+    await done;
+
+    const next = JSON.parse(localStorage.getItem('techjobs_saved_jobs') || '[]');
+    expect(next).toHaveLength(1);
+    expect(next[0].url).toBe('http://example.com/job-2');
+  });
+
+  it('list keeps failed guest uploads visible as pending alongside account saves', async () => {
+    server.use(http.get('/api/saved-jobs', () => HttpResponse.json([])));
+    localStorage.setItem('techjobs_saved_jobs', JSON.stringify([guestJob()]));
+
+    const jobs = await savedJobsApi.list();
+
+    expect(jobs).toHaveLength(1);
+    expect(jobs[0]).toMatchObject({ url: 'http://example.com/job-1', pending: true });
+  });
+
   it('does nothing when there are no guest saves', async () => {
     let calls = 0;
     server.use(http.post('/api/saved-jobs', () => { calls += 1; return new HttpResponse(null, { status: 201 }); }));

@@ -166,7 +166,17 @@ export function parseJobsPayload(raw: unknown): JobsPayload {
   if (dropped > 0) {
     console.warn(`Jobs payload: dropped ${dropped} record(s) missing required fields`);
   }
-  return { ...(envelope as unknown as JobsPayload), jobs };
+  // cityLabels is renderer-facing: only string values are admitted.
+  const rawCityLabels = envelope.cityLabels;
+  const cityLabels: Record<string, string> =
+    rawCityLabels && typeof rawCityLabels === 'object' && !Array.isArray(rawCityLabels)
+      ? Object.fromEntries(
+          Object.entries(rawCityLabels).filter(
+            (entry): entry is [string, string] => typeof entry[1] === 'string',
+          ),
+        )
+      : {};
+  return { ...(envelope as unknown as JobsPayload), cityLabels, jobs };
 }
 
 let inflightPayload: Promise<JobsPayload> | null = null;

@@ -17,6 +17,8 @@ export interface SavedJob {
   applied_date?: string;
   comments?: string;
   created_date: string;
+  /** Guest record whose upload to the account has not completed yet. */
+  pending?: boolean;
 }
 
 export interface Company {
@@ -75,7 +77,15 @@ export const savedJobsApi = {
       }
       
         if (!response.ok) throw new Error('Failed to fetch');
-        return await response.json();
+        const serverJobs: SavedJob[] = await response.json();
+        // Guest records whose upload has not completed stay visible alongside
+        // account saves, marked pending - otherwise a failed reconciliation
+        // looks like "No saved jobs yet" after sign-in.
+        const serverUrls = new Set(serverJobs.map((j) => j.url));
+        const pending = getLocalJobs()
+          .filter((j) => !serverUrls.has(j.url))
+          .map((j) => ({ ...j, pending: true }));
+        return [...pending, ...serverJobs];
       } catch (error) {
         console.error('Backend error, falling back to localStorage:', error);
     const jobs = getLocalJobs();
@@ -238,9 +248,9 @@ async function mergeGuestDetailsIntoAccount(guest: SavedJob): Promise<boolean> {
  * as uploaded), applied dates/comments are preserved, and records whose
  * upload failed stay in localStorage for the next reconciliation attempt.
  */
-export async function reconcileGuestSavedJobs(): Promise<void> {
+export async function reconcileGuestSavedJobs(): Promise<number> {
   const local = getLocalJobs();
-  if (local.length === 0) return;
+  if (local.length === 0) return 0;
   const remaining: SavedJob[] = [];
   for (const job of local) {
     try {
@@ -282,11 +292,22 @@ export async function reconcileGuestSavedJobs(): Promise<void> {
       remaining.push(job); // network failure - keep for next time
     }
   }
-  if (remaining.length === 0) {
+  const pendingIds = new Set(remaining.map((job) => job.id));
+  const uploadedSnapshots = new Map(
+    local
+      .filter((job) => !pendingIds.has(job.id))
+      .map((job) => [job.id, JSON.stringify(job)] as const),
+  );
+  // Preserve saves and edits made while the uploads were in flight.
+  const next = getLocalJobs().filter(
+    (job) => uploadedSnapshots.get(job.id) !== JSON.stringify(job),
+  );
+  if (next.length === 0) {
     localStorage.removeItem(SAVED_JOBS_KEY);
   } else {
-    setLocalJobs(remaining);
+    setLocalJobs(next);
   }
+  return next.length;
 }
 
 // Company operations

@@ -74,7 +74,7 @@ export default function CompanyProfile() {
       job.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
       job.city?.toLowerCase().includes(searchQuery.toLowerCase()) ||
       job.job_category?.toLowerCase().includes(searchQuery.toLowerCase())
-    ).sort((a, b) => (b.updated ? new Date(b.updated).getTime() : 0) - (a.updated ? new Date(a.updated).getTime() : 0));
+    );
 
     return {
       name: companyName,
