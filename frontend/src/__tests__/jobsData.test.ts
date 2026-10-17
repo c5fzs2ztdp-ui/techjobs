@@ -59,6 +59,16 @@ describe('fetchJobsPayload normalization', () => {
     expect(job.cities).toEqual(['Tel Aviv']);
   });
 
+  it('drops malformed cityLabels values at the boundary', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => payloadResponse({
+      schemaVersion: 1,
+      cityLabels: { Haifa: { he: 'חיפה' }, 'Tel Aviv': 'תל אביב' },
+      jobs: [],
+    })));
+    const payload = await fetchJobsPayload();
+    expect(payload.cityLabels).toEqual({ 'Tel Aviv': 'תל אביב' });
+  });
+
   it('does not mutate the shared payload when sorting', async () => {
     const payload = {
       schemaVersion: 1,

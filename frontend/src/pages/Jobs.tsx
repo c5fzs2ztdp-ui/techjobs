@@ -165,6 +165,10 @@ export default function Jobs() {
           job.department?.toLowerCase().includes(search) ||
           job.city?.toLowerCase().includes(search) ||
           job.cityHe?.includes(searchQuery) ||
+          job.cities.some(city =>
+            city.toLowerCase().includes(search) ||
+            (cityLabels[city] || '').toLowerCase().includes(search)
+          ) ||
           job.technologies.some(t => t.toLowerCase().includes(search));
         if (!matchesSearch) return false;
       }
@@ -203,7 +207,7 @@ export default function Jobs() {
 
       return true;
     });
-  }, [jobs, filters, searchQuery]);
+  }, [jobs, filters, searchQuery, cityLabels]);
 
   // Pagination
   const totalPages = Math.ceil(filteredJobs.length / JOBS_PER_PAGE);

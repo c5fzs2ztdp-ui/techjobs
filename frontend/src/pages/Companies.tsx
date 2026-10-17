@@ -82,9 +82,12 @@ export default function Companies() {
     return companies.filter(c =>
       c.name.toLowerCase().includes(lowerQuery) ||
       c.categories.some(cat => cat.toLowerCase().includes(lowerQuery)) ||
-      c.locations.some(loc => loc.toLowerCase().includes(lowerQuery))
+      c.locations.some(loc =>
+        loc.toLowerCase().includes(lowerQuery) ||
+        (cityLabels[loc] || '').toLowerCase().includes(lowerQuery)
+      )
     );
-  }, [companies, searchQuery]);
+  }, [companies, searchQuery, cityLabels]);
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-warm-50 to-iris-50/30">
