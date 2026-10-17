@@ -25,6 +25,7 @@ export interface Job {
   verification: string | null;
   verifiedAt: string | null;
   firstSeenAt: string | null;
+  closedAt: string | null;       // set when the row is a closed tombstone (refreshState 'closed')
   lastRefreshAttemptAt: string | null;
   lastRefreshError: string | null;
   refreshState: string | null;
@@ -45,6 +46,21 @@ export interface JobsPayload {
   schemaVersion?: number;
   cityLabels?: Record<string, string>;
   jobs: Job[];
+}
+
+/** Closed tombstone: the owning source verified the posting is gone. */
+export function isClosed(job: Job): boolean {
+  return job.refreshState === 'closed';
+}
+
+/** First seen today (Asia/Jerusalem) - drives the "New" badge. */
+export function isNewToday(job: Job): boolean {
+  if (!job.firstSeenAt) return false;
+  const seen = new Date(job.firstSeenAt);
+  if (Number.isNaN(seen.getTime())) return false;
+  const dayInIsrael = (d: Date) =>
+    d.toLocaleDateString('en-CA', { timeZone: 'Asia/Jerusalem' });
+  return dayInIsrael(seen) === dayInIsrael(new Date());
 }
 
 /** Best human-readable city label: Hebrew when known, else English, else raw location. */

@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { fetchJobsPayload, fetchAllJobs } from '@/components/jobs/jobsData';
+import { fetchJobsPayload, fetchAllJobs, isClosed, isNewToday, type Job } from '@/components/jobs/jobsData';
 
 const payloadResponse = (body: unknown) =>
   ({ ok: true, json: async () => body } as Response);
@@ -98,5 +98,23 @@ describe('fetchAllJobs ordering', () => {
     })));
     const titles = (await fetchAllJobs()).map(j => j.title);
     expect(titles).toEqual(['New Engineer', 'Old Engineer', 'Undated Engineer', 'מהנדס תוכנה']);
+  });
+});
+
+describe('freshness helpers', () => {
+  const base = { company: 'A', title: 'Engineer', url: 'https://x/1', job_category: 'software' } as Job;
+
+  it('isClosed flags closed tombstones only', () => {
+    expect(isClosed({ ...base, refreshState: 'closed', closedAt: '2026-10-17T00:00:00Z' })).toBe(true);
+    expect(isClosed({ ...base, refreshState: 'fresh', closedAt: null })).toBe(false);
+    expect(isClosed({ ...base, refreshState: null, closedAt: null })).toBe(false);
+  });
+
+  it('isNewToday is anchored to the Asia/Jerusalem calendar day', () => {
+    const now = new Date();
+    expect(isNewToday({ ...base, firstSeenAt: now.toISOString() })).toBe(true);
+    expect(isNewToday({ ...base, firstSeenAt: '2020-01-01T00:00:00Z' })).toBe(false);
+    expect(isNewToday({ ...base, firstSeenAt: null })).toBe(false);
+    expect(isNewToday({ ...base, firstSeenAt: 'not-a-date' })).toBe(false);
   });
 });

@@ -6,7 +6,7 @@ import { MapContainer, TileLayer, Marker, Popup, useMap } from "react-leaflet";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 import { useQuery } from "@tanstack/react-query";
-import { fetchJobsPayload, JOBS_PAYLOAD_QUERY_KEY, selectSortedJobs } from "@/components/jobs/jobsData";
+import { fetchJobsPayload, isClosed, JOBS_PAYLOAD_QUERY_KEY, selectSortedJobs } from "@/components/jobs/jobsData";
 
 // Israeli city coordinates - English and Hebrew names
 const CITY_COORDS: Record<string, [number, number]> = {
@@ -267,7 +267,7 @@ export default function Map() {
     queryKey: JOBS_PAYLOAD_QUERY_KEY,
     queryFn: fetchJobsPayload,
     staleTime: 1000 * 60 * 5, // 5 minutes
-    select: selectSortedJobs,
+    select: (payload) => selectSortedJobs(payload).filter(j => !isClosed(j)),
   });
   const error = isError ? 'Failed to load job data. Please try again later.' : null;
 

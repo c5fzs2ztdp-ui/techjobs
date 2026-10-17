@@ -6,6 +6,7 @@ export interface Filters {
   seniorities: string[];
   cities: string[];
   regions: string[];
+  showClosed: boolean;
 }
 
 export const EMPTY_FILTERS: Filters = {
@@ -15,5 +16,6 @@ export const EMPTY_FILTERS: Filters = {
   employmentTypes: [],
   seniorities: [],
   cities: [],
-  regions: []
+  regions: [],
+  showClosed: false
 };

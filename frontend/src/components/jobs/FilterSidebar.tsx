@@ -48,7 +48,7 @@ export default function FilterSidebar({
     onClose,
   });
 
-  const toggleListFilter = (key: keyof Omit<Filters, 'search'>, value: string) => {
+  const toggleListFilter = (key: keyof Omit<Filters, 'search' | 'showClosed'>, value: string) => {
     setFilters(prev => ({
       ...prev,
       [key]: prev[key].includes(value)
@@ -71,7 +71,7 @@ export default function FilterSidebar({
     legend: string,
     values: string[],
     selected: string[],
-    key: keyof Omit<Filters, 'search'>,
+    key: keyof Omit<Filters, 'search' | 'showClosed'>,
     maxHeight = false,
     labelFor: (v: string) => string = v => v.replace(/-/g, ' ')
   ) => (
@@ -132,6 +132,19 @@ export default function FilterSidebar({
           {renderCheckboxList("Employment Type", employmentTypes, filters.employmentTypes, 'employmentTypes')}
           {renderCheckboxList("Seniority", seniorities, filters.seniorities, 'seniorities')}
           {cities.length > 0 && renderCheckboxList("City", cities, filters.cities, 'cities', true, v => cityLabels[v] || v)}
+          <fieldset>
+            <legend className="font-medium text-sm text-warm-900 mb-3">Closed Jobs</legend>
+            <div className="flex items-center space-x-2">
+              <Checkbox
+                id="show-closed"
+                checked={filters.showClosed}
+                onCheckedChange={(checked) => setFilters(prev => ({ ...prev, showClosed: checked === true }))}
+              />
+              <Label htmlFor="show-closed" className="text-sm text-warm-600 cursor-pointer">
+                Show jobs that are no longer listed
+              </Label>
+            </div>
+          </fieldset>
         </div>
       </ScrollArea>
     </aside>

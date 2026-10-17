@@ -240,6 +240,7 @@ const jobs = raw.map(j => {
     lastRefreshAttemptAt: j.lastRefreshAttemptAt ?? null,
     lastRefreshError: j.lastRefreshError ?? null,
     refreshState: j.refreshState ?? null,
+    closedAt: j.closedAt ?? null,
     region: j.region ?? null,
     locationSource: j.locationSource ?? null,
     cities,

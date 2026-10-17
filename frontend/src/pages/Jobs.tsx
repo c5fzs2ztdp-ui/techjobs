@@ -12,7 +12,7 @@ import { EMPTY_FILTERS, type Filters } from "@/components/jobs/filters";
 import SearchHeader from "@/components/jobs/SearchHeader";
 import JobCard from "@/components/jobs/JobCard";
 import JobsLoader from "@/components/jobs/JobsLoader";
-import { displayCity, fetchJobsPayload, JOBS_PAYLOAD_QUERY_KEY, selectCityLabels, selectSortedJobs, type Job } from "@/components/jobs/jobsData";
+import { displayCity, fetchJobsPayload, isClosed, JOBS_PAYLOAD_QUERY_KEY, selectCityLabels, selectSortedJobs, type Job } from "@/components/jobs/jobsData";
 import { savedJobsApi } from "@/api/storage";
 
 // Types for mutation results
@@ -156,6 +156,9 @@ export default function Jobs() {
   // Filter jobs
   const filteredJobs = useMemo(() => {
     return jobs.filter(job => {
+      // Closed tombstones are hidden unless the user asks for them
+      if (isClosed(job) && !filters.showClosed) return false;
+
       // Search filter
       if (searchQuery) {
         const search = searchQuery.toLowerCase();

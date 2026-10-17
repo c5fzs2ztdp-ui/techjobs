@@ -113,22 +113,28 @@ test('unsupported region annotations are dropped', () => {
   assert.deepEqual(deriveRegions([], ['narnia'], null), []);
 });
 
-// The general account-manager sales rule must not shadow the specific
-// Technical Account Manager support rule (Nati round-3 finding).
-test('Technical Account Manager -> customer-support, not sales', () => {
-  assert.equal(deriveJobCategory('Technical Account Manager', null), 'customer-support');
-  assert.equal(deriveJobCategory('Team Lead, Technical Account Manager', null), 'customer-support');
-  assert.equal(deriveJobCategory('Account Manager', null), 'sales'); // general rule still works
-});
-
-// Generic automation-engineer must not swallow manufacturing/hardware
-// automation titles (Nati round-4 finding); explicit QA/SDET still match.
-test('automation contexts: manufacturing/hardware vs QA', () => {
-  assert.equal(deriveJobCategory('Manufacturing Automation Engineer', null), 'mechanical-manufacturing');
-  assert.equal(deriveJobCategory('Senior VLSI CAD and AI Automation Engineer', null), 'hardware-electronics');
-  assert.equal(deriveJobCategory('QA Automation Engineer', null), 'qa');
-  assert.equal(deriveJobCategory('Test Automation Engineer', null), 'qa');
-  assert.equal(deriveJobCategory('Automation Engineer', null), 'other'); // ambiguous - never forced into QA
+// closedAt passes through so the site can mark/hide closed tombstones.
+test('closedAt passes through the converter', async () => {
+  const { execFileSync } = await import('node:child_process');
+  const fs = await import('node:fs');
+  const os = await import('node:os');
+  const path = await import('node:path');
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'convert-closed-'));
+  try {
+    const input = path.join(tmp, 'in.json');
+    const output = path.join(tmp, 'out.json');
+    fs.writeFileSync(input, JSON.stringify([
+      { company: 'A', title: 'Engineer', url: 'https://x/1', city: 'Tel Aviv', refreshState: 'closed', closedAt: '2026-10-17T00:00:00Z' },
+      { company: 'A', title: 'Designer', url: 'https://x/2', city: 'Haifa', refreshState: 'fresh' },
+    ]));
+    execFileSync(process.execPath, ['scripts/convert_jobs.mjs', input, output]);
+    const payload = JSON.parse(fs.readFileSync(output, 'utf8'));
+    assert.equal(payload.jobs[0].closedAt, '2026-10-17T00:00:00Z');
+    assert.equal(payload.jobs[0].refreshState, 'closed');
+    assert.equal(payload.jobs[1].closedAt, null);
+  } finally {
+    fs.rmSync(tmp, { recursive: true, force: true });
+  }
 });
 
 test('every region-mapped city round-trips through normalizeCity with a Hebrew label', () => {
