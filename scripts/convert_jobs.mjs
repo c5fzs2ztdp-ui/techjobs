@@ -87,10 +87,10 @@ for (const [en, he, variants] of CITIES) {
 }
 CITY_MATCHERS.sort((a, b) => (b.needle?.length ?? 8) - (a.needle?.length ?? 8));
 
-const NON_CITY = /^\s*(il(,\s*il)?|.*remote.*|home( office)?|israel(,\s*il)?|\d+ locations?|various locations.*|multiple locations|remote|israel wide|all israel|hybrid)\s*$/i;
+const NON_CITY = /^\s*(il(,\s*il)?|home( office)?|israel(,\s*il)?|\d+ locations?|various locations.*|multiple locations|remote|israel wide|all israel|hybrid)\s*$/i;
 const JUNK_CITY = /https?:\/\/|www\.|\.co(m)?\b|careers/i;
 
-function normalizeCity(raw) {
+export function normalizeCity(raw) {
   if (!raw) return { city: null, cityHe: null };
   const trimmed = raw.trim();
   if (NON_CITY.test(trimmed) || JUNK_CITY.test(trimmed)) return { city: null, cityHe: null };
@@ -187,8 +187,8 @@ const jobs = raw.map(j => {
     refreshState: j.refreshState ?? null,
     region: j.region ?? null,
     locationSource: j.locationSource ?? null,
-    cities: Array.isArray(j.cities) ? j.cities : (j.city ? [j.city] : []),
-    regions: Array.isArray(j.regions) ? j.regions : (j.region ? [j.region] : []),
+    cities: [...new Set([...(Array.isArray(j.cities) ? j.cities : []), city].filter(Boolean))],
+    regions: [...new Set([...(Array.isArray(j.regions) ? j.regions : []), j.region].filter(Boolean))],
     // site-specific derived fields
     cityHe,
     job_category: deriveJobCategory(j.title, j.department),

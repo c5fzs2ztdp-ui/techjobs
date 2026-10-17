@@ -285,8 +285,13 @@ export default function Map() {
     const cityMap: Record<string, CityMapEntry> = {};
 
     jobs.forEach((job) => {
-      const city = job.city?.trim();
-      if (!city) return;
+      // Count the job once per canonical city, matching filter semantics.
+      const jobCities = (job.cities?.length ? job.cities : [job.city]).filter((c): c is string => Boolean(c));
+      const seen = new Set<string>();
+      for (const rawCity of jobCities) {
+      const city = rawCity.trim();
+      if (!city || seen.has(city)) continue;
+      seen.add(city);
 
       // Find matching city coords
       let coords: [number, number] | null = null;
@@ -298,13 +303,14 @@ export default function Map() {
         }
       }
 
-      if (!coords) return; // Skip unknown cities
+      if (!coords) continue; // Skip unknown cities
 
       if (!cityMap[city]) {
         cityMap[city] = { companies: new Set<string>(), jobCount: 0 };
       }
       cityMap[city].companies.add(job.company);
       cityMap[city].jobCount++;
+      }
     });
 
     // Convert to array and merge similar cities

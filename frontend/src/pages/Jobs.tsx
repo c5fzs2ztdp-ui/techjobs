@@ -27,20 +27,26 @@ export default function Jobs() {
   const location = useLocation();
   const searchParams = new URLSearchParams(location.search);
   const initialSearch = searchParams.get('search') || '';
-  const initialCategory = searchParams.get('category') || '';
+  const initialCategoryParam = searchParams.get('category') || '';
   const initialCity = searchParams.get('city') || '';
 
   const [searchQuery, setSearchQuery] = useState(initialSearch);
 
   // Apply category/city from URL on mount
   useEffect(() => {
+    // Legacy homepage industry links used names, not role slugs.
+    const LEGACY_CATEGORY_SLUGS: Record<string, string> = {
+      'AI/ML': 'data-ai', 'Cybersecurity': 'security', 'Gaming': 'software',
+      'Health': 'other', 'Fintech': 'finance', 'Aerospace': 'hardware-electronics',
+    };
+    const initialCategory = LEGACY_CATEGORY_SLUGS[initialCategoryParam] || initialCategoryParam;
     if (initialCategory) {
       setFilters(prev => ({ ...prev, jobCategories: [initialCategory] }));
     }
     if (initialCity) {
       setFilters(prev => ({ ...prev, cities: [initialCity] }));
     }
-  }, [initialCategory, initialCity]);
+  }, [initialCategoryParam, initialCity]);
   const [isFilterOpen, setIsFilterOpen] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
 
