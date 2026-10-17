@@ -121,8 +121,11 @@ export const savedJobsApi = {
         });
       
       if (response.status === 401) {
-        // Not authenticated - use localStorage
+        // Not authenticated - use localStorage. Dedupe by URL: a rapid
+        // double-save (before the list invalidates) must not create twins.
         const jobs = getLocalJobs();
+        const existing = jobs.find((j) => j.url === job.url);
+        if (existing) return existing;
         const newJob: SavedJob = {
           ...job,
           id: crypto.randomUUID(),
