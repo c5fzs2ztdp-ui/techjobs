@@ -15,6 +15,11 @@ on:
 permissions:
   contents: read
 
+# A second publish must queue, never race the push to the data branch.
+concurrency:
+  group: publish-jobs-data
+  cancel-in-progress: false
+
 jobs:
   publish:
     runs-on: ubuntu-latest
