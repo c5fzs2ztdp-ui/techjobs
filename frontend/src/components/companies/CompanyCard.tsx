@@ -17,10 +17,10 @@ interface CompanyData {
 interface CompanyCardProps {
   company: CompanyData;
   index?: number;
+  cityLabels?: Record<string, string>;
 }
 
-
-export default function CompanyCard({ company, index = 0 }: CompanyCardProps) {
+export default function CompanyCard({ company, index = 0, cityLabels = {} }: CompanyCardProps) {
   return (
     <motion.div
       initial={{ opacity: 0, y: 20 }}
@@ -47,7 +47,7 @@ export default function CompanyCard({ company, index = 0 }: CompanyCardProps) {
                 <div className="flex items-center gap-2 text-sm text-warm-600">
                   <MapPin className="w-4 h-4 text-warm-400" />
                   <span className="line-clamp-1">
-                    {company.locations.slice(0, 3).join(', ')}
+                    {company.locations.slice(0, 3).map(l => cityLabels[l] || l).join(', ')}
                     {company.locations.length > 3 && ` +${company.locations.length - 3}`}
                   </span>
                 </div>

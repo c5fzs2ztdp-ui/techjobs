@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { displayCity, fetchAllJobs } from "@/components/jobs/jobsData";
+import { fetchAllJobs, fetchCityLabels } from "@/components/jobs/jobsData";
 import { Link } from "react-router-dom";
 import { createPageUrl } from "@/utils";
 import { Button } from "@/components/ui/button";
@@ -46,8 +46,9 @@ export default function Companies() {
 
       const company = companyMap.get(normalizedName)!;
       company.jobs.push(job);
-      const city = displayCity(job);
-      if (city) company.locations.add(city);
+      // Canonical cities only - never raw location strings ("2 Locations").
+      const jobCities = job.cities?.length ? job.cities : (job.city ? [job.city] : []);
+      jobCities.forEach(c => company.locations.add(c));
       if (job.department) company.categories.add(job.department);
       const t = job.updated ? new Date(job.updated).getTime() : 0;
       const cur = company.latestUpdate ? new Date(company.latestUpdate).getTime() : 0;
@@ -66,6 +67,12 @@ export default function Companies() {
       }))
       .sort((a, b) => b.jobCount - a.jobCount); // Sort by most jobs first
   }, [jobs]);
+
+  const { data: cityLabels = {} } = useQuery({
+    queryKey: ['cityLabels'],
+    queryFn: fetchCityLabels,
+    staleTime: 1000 * 60 * 5,
+  });
 
   const filteredCompanies = useMemo(() => {
     if (!searchQuery) return companies;
@@ -134,7 +141,7 @@ export default function Companies() {
             </motion.p>
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
               {filteredCompanies.map((company, index) => (
-                <CompanyCard key={company.name} company={company} index={index} />
+                <CompanyCard key={company.name} company={company} index={index} cityLabels={cityLabels} />
               ))}
             </div>
           </>
