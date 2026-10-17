@@ -99,6 +99,9 @@ export default function Jobs() {
         seniority: result.job.seniority,
       });
     },
+    onError: () => {
+      toast.error('Could not update saved jobs. Please try again.');
+    },
   });
 
   const applyMutation = useMutation({
@@ -136,6 +139,9 @@ export default function Jobs() {
         city: result.job.city,
         seniority: result.job.seniority,
       });
+    },
+    onError: () => {
+      toast.error('Could not update the application status. Please try again.');
     },
   });
 
