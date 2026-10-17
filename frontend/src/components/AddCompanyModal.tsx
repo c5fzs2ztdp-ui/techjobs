@@ -114,7 +114,11 @@ export default function AddCompanyModal({ open, onOpenChange }: AddCompanyModalP
   const openGitHubPR = () => {
     // The site runs exclusively on techjob_map data now; new companies are
     // added there. Send contributors to the pipeline repo instead of techmap.
-    window.open('https://github.com/halleelyasaf/techjob_map', '_blank');
+    window.open(
+      (import.meta.env.VITE_SUBMIT_COMPANY_URL as string) ||
+        'https://github.com/halleelyasaf/techjob_map',
+      '_blank'
+    );
   };
 
   const resetForm = () => {
