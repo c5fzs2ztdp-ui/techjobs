@@ -1,6 +1,6 @@
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { MapPin, Users } from "lucide-react";
+import { MapPin } from "lucide-react";
 import { Link } from "react-router-dom";
 import { createPageUrl } from "@/utils";
 import { motion } from "framer-motion";
@@ -19,13 +19,6 @@ interface CompanyCardProps {
   index?: number;
 }
 
-const sizeLabels: Record<string, string> = {
-  'xs': '1-10',
-  's': '11-50',
-  'm': '51-200',
-  'l': '201-1,000',
-  'xl': '1,001+'
-};
 
 export default function CompanyCard({ company, index = 0 }: CompanyCardProps) {
   return (
@@ -49,12 +42,6 @@ export default function CompanyCard({ company, index = 0 }: CompanyCardProps) {
             </h3>
 
             <div className="space-y-2 mb-4 flex-1">
-              <div className="flex items-center gap-2 text-sm text-warm-600">
-                <Users className="w-4 h-4 text-warm-400" />
-                <span>
-                  {company.sizes.map(s => sizeLabels[s] || s).join(', ') || 'Size not specified'}
-                </span>
-              </div>
 
               {company.locations.length > 0 && (
                 <div className="flex items-center gap-2 text-sm text-warm-600">

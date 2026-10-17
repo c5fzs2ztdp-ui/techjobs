@@ -83,3 +83,11 @@ test('technologist titles are not software', () => {
   // real software development in Hebrew still classifies
   assert.equal(deriveJobCategory('מהנדס פיתוח תוכנה', null), 'software');
 });
+
+// Regression: "Tel Aviv / Remote" must keep its city; only standalone "remote" is non-city.
+test('remote-mentioned location keeps real city', async () => {
+  const { normalizeCity } = await import('./convert_jobs.mjs');
+  assert.equal(normalizeCity('Tel Aviv / Remote').city, 'Tel Aviv');
+  assert.equal(normalizeCity('Remote or Haifa').city, 'Haifa');
+  assert.equal(normalizeCity('Remote').city, null);
+});
