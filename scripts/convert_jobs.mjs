@@ -218,7 +218,7 @@ const jobs = raw.map(j => {
   // are merged only when they are supported region slugs.
   const regions = deriveRegions(cities, j.regions, j.region);
   return {
-    // full 21-field techjob_map schema, preserved
+    // renderer-facing fields from the 21-field techjob_map schema
     company: j.company ?? null,
     title: j.title ?? null,
     location: j.location ?? null,
@@ -231,18 +231,14 @@ const jobs = raw.map(j => {
     seniority: j.seniority ?? null,
     technologies: Array.isArray(j.technologies) ? j.technologies : [],
     postedAt: j.postedAt ?? null,
-    jobId: j.jobId ?? null,
-    jobCode: j.jobCode ?? null,
-    source: j.source ?? null,
-    verification: j.verification ?? null,
-    verifiedAt: j.verifiedAt ?? null,
+    // Ops/provenance fields (jobId, jobCode, source, verification, verifiedAt,
+    // lastRefreshAttemptAt, lastRefreshError, locationSource) stay in the
+    // source dataset - the site never renders them and they cost ~30% of the
+    // payload over the wire.
     firstSeenAt: j.firstSeenAt ?? null,
-    lastRefreshAttemptAt: j.lastRefreshAttemptAt ?? null,
-    lastRefreshError: j.lastRefreshError ?? null,
     refreshState: j.refreshState ?? null,
     closedAt: j.closedAt ?? null,
     region: j.region ?? null,
-    locationSource: j.locationSource ?? null,
     cities,
     regions,
     // site-specific derived fields
