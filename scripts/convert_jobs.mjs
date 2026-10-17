@@ -72,6 +72,9 @@ const CITIES = [
   ['Central District', 'מרכז', ['מרכז']],
   ['Northern District', 'צפון', ['צפון']],
   ['Southern District', 'דרום', ['דרום']],
+  ['Dalton', 'דלתון', ['dalton', 'דלתון']],
+  ['Kfar Netter', 'כפר נטר', ['kfar netter', 'kfar-netter', 'כפר נטר']],
+  ['Magal', 'מגל', ['kibbutz magal', 'מגל']],
 ];
 
 // Canonical city -> region slug. One location registry: regions are DERIVED
