@@ -1,4 +1,6 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
+import { useQuery } from '@tanstack/react-query';
+import { fetchJobsPayload } from "@/components/jobs/jobsData";
 import { Link, useNavigate } from "react-router-dom";
 import { createPageUrl } from "@/utils";
 import { Button } from "@/components/ui/button";
@@ -30,13 +32,24 @@ const categories = [
   { name: "Aerospace", slug: "hardware-electronics", icon: Rocket, color: "from-blue-500 to-cyan-600" },
 ];
 
-const stats = [
-  { label: "Active Jobs", value: "2,500+", icon: Briefcase },
-  { label: "Tech Companies", value: "500+", icon: Building2 },
-  { label: "Cities Covered", value: "50+", icon: MapPin },
-];
+const FALLBACK_STATS = { jobs: "2,500+", companies: "500+", cities: "50+" };
 
 export default function Home() {
+  const { data: payload } = useQuery({
+    queryKey: ['jobsPayload'],
+    queryFn: fetchJobsPayload,
+    staleTime: 1000 * 60 * 5,
+  });
+  const stats = useMemo(() => {
+    const jobs = payload?.jobs || [];
+    const companies = new Set(jobs.map(j => j.company)).size;
+    const cities = new Set(jobs.flatMap(j => j.cities || [])).size;
+    return [
+      { label: "Active Jobs", value: jobs.length ? jobs.length.toLocaleString() : FALLBACK_STATS.jobs, icon: Briefcase },
+      { label: "Tech Companies", value: companies ? companies.toLocaleString() : FALLBACK_STATS.companies, icon: Building2 },
+      { label: "Cities Covered", value: cities ? String(cities) : FALLBACK_STATS.cities, icon: MapPin },
+    ];
+  }, [payload]);
   const navigate = useNavigate();
   const [showAddCompany, setShowAddCompany] = useState(false);
 
