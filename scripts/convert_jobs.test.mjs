@@ -111,3 +111,27 @@ test('unsupported region annotations are dropped', () => {
   assert.deepEqual(deriveRegions(['Haifa'], ['narnia'], 'middle-earth'), ['haifa-krayot']);
   assert.deepEqual(deriveRegions([], ['narnia'], null), []);
 });
+
+// closedAt passes through so the site can mark/hide closed tombstones.
+test('closedAt passes through the converter', async () => {
+  const { execFileSync } = await import('node:child_process');
+  const fs = await import('node:fs');
+  const os = await import('node:os');
+  const path = await import('node:path');
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'convert-closed-'));
+  try {
+    const input = path.join(tmp, 'in.json');
+    const output = path.join(tmp, 'out.json');
+    fs.writeFileSync(input, JSON.stringify([
+      { company: 'A', title: 'Engineer', url: 'https://x/1', city: 'Tel Aviv', refreshState: 'closed', closedAt: '2026-10-17T00:00:00Z' },
+      { company: 'A', title: 'Designer', url: 'https://x/2', city: 'Haifa', refreshState: 'fresh' },
+    ]));
+    execFileSync(process.execPath, ['scripts/convert_jobs.mjs', input, output]);
+    const payload = JSON.parse(fs.readFileSync(output, 'utf8'));
+    assert.equal(payload.jobs[0].closedAt, '2026-10-17T00:00:00Z');
+    assert.equal(payload.jobs[0].refreshState, 'closed');
+    assert.equal(payload.jobs[1].closedAt, null);
+  } finally {
+    fs.rmSync(tmp, { recursive: true, force: true });
+  }
+});

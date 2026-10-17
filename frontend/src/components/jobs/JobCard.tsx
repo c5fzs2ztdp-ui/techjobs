@@ -5,7 +5,7 @@ import { MapPin, Briefcase, Bookmark, BookmarkCheck, ExternalLink, CheckCircle2,
 import { motion } from "framer-motion";
 import { usePostHog } from 'posthog-js/react';
 import CompanyLogo from "@/components/CompanyLogo";
-import { displayCity, CATEGORY_LABELS, type Job } from "./jobsData";
+import { displayCity, isClosed, isNewToday, CATEGORY_LABELS, type Job } from "./jobsData";
 
 const seniorityColors: Record<string, string> = {
   intern: 'bg-green-50 text-green-700 border-green-200',
@@ -68,6 +68,16 @@ export default function JobCard({ job, onSave, isSaved, onApply, isApplied, inde
                 <CompanyLogo name={job.company} className="w-12 h-12 hidden sm:flex" aria-hidden="true" />
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 mb-2 flex-wrap">
+                    {isClosed(job) && (
+                      <Badge variant="outline" className="bg-warm-100 text-warm-500 border-warm-300 text-xs">
+                        Closed
+                      </Badge>
+                    )}
+                    {!isClosed(job) && isNewToday(job) && (
+                      <Badge variant="outline" className="bg-green-50 text-green-700 border-green-300 text-xs font-semibold">
+                        New
+                      </Badge>
+                    )}
                     {job.seniority && (
                       <Badge
                         variant="outline"
