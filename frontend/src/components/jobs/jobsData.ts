@@ -94,6 +94,22 @@ export const JOBS_PAYLOAD_SCHEMA_VERSION = 1;
 
 const REQUIRED_JOB_STRING_FIELDS = ['company', 'title', 'url', 'job_category'] as const;
 
+// Optional renderer-facing fields are normalized, not just copied: a
+// non-string scalar becomes null and arrays keep only string elements, so a
+// malformed record renders as missing data instead of crashing a card
+// (e.g. employmentType: 7 -> .replace crash, technologies: [{...}] ->
+// invalid React child).
+const OPTIONAL_STRING_FIELDS = [
+  'location', 'city', 'department', 'description', 'employmentType', 'workModel',
+  'seniority', 'postedAt', 'jobId', 'jobCode', 'source', 'verification',
+  'verifiedAt', 'firstSeenAt', 'closedAt', 'lastRefreshAttemptAt',
+  'lastRefreshError', 'refreshState', 'region', 'locationSource', 'cityHe', 'updated',
+] as const;
+
+function stringArray(value: unknown): string[] {
+  return Array.isArray(value) ? value.filter((x): x is string => typeof x === 'string') : [];
+}
+
 export function parseJobsPayload(raw: unknown): JobsPayload {
   if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {
     throw new Error('Incompatible jobs payload: expected an object envelope');
@@ -121,13 +137,15 @@ export function parseJobsPayload(raw: unknown): JobsPayload {
       dropped += 1;
       continue;
     }
-    const j = record as Job;
-    jobs.push({
-      ...j,
-      technologies: Array.isArray(j.technologies) ? j.technologies : [],
-      cities: Array.isArray(j.cities) ? j.cities : [],
-      regions: Array.isArray(j.regions) ? j.regions : [],
-    });
+    const rec: Record<string, unknown> = { ...(record as Record<string, unknown>) };
+    for (const f of OPTIONAL_STRING_FIELDS) {
+      const v = rec[f];
+      rec[f] = typeof v === 'string' && v !== '' ? v : null;
+    }
+    rec.technologies = stringArray(rec.technologies);
+    rec.cities = stringArray(rec.cities);
+    rec.regions = stringArray(rec.regions);
+    jobs.push(rec as unknown as Job);
   }
   if (dropped > 0) {
     console.warn(`Jobs payload: dropped ${dropped} record(s) missing required fields`);
