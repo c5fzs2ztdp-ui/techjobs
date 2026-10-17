@@ -9,10 +9,10 @@ afterEach(() => vi.unstubAllGlobals());
 describe('fetchJobsPayload normalization', () => {
   it('fills missing arrays so renderers never throw', async () => {
     vi.stubGlobal('fetch', vi.fn(async () => payloadResponse({
-      updatedAt: '2026-10-17T00:00:00Z', count: 2,
+      schemaVersion: 1, updatedAt: '2026-10-17T00:00:00Z', count: 2,
       jobs: [
-        { company: 'A', title: 'Engineer', url: 'https://x/1' }, // no technologies/cities/regions
-        { company: 'B', title: 'מהנדס', url: 'https://x/2', technologies: null, cities: 'tel-aviv' },
+        { company: 'A', title: 'Engineer', url: 'https://x/1', job_category: 'software' }, // no technologies/cities/regions
+        { company: 'B', title: 'מהנדס', url: 'https://x/2', job_category: 'software', technologies: null, cities: 'tel-aviv' },
       ],
     })));
     const payload = await fetchJobsPayload();
@@ -22,10 +22,44 @@ describe('fetchJobsPayload normalization', () => {
     expect(payload.jobs[1].cities).toEqual([]);
   });
 
-  it('survives an empty/malformed payload', async () => {
+  it('rejects a structurally incompatible payload instead of an empty board', async () => {
     vi.stubGlobal('fetch', vi.fn(async () => payloadResponse({})));
+    await expect(fetchAllJobs()).rejects.toThrow('missing jobs array');
+  });
+
+  it('rejects an unsupported schema version', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => payloadResponse({ schemaVersion: 2, jobs: [] })));
+    await expect(fetchJobsPayload()).rejects.toThrow('schemaVersion');
+  });
+
+  it('drops records missing required renderer fields instead of crashing JobCard', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => payloadResponse({
+      schemaVersion: 1,
+      jobs: [
+        { company: 'A', title: 'Engineer', url: 'https://x/1' }, // no job_category
+        { company: 'B', title: 'Designer', url: 'https://x/2', job_category: 'design' },
+        null,
+      ],
+    })));
     const jobs = await fetchAllJobs();
-    expect(jobs).toEqual([]);
+    expect(jobs).toHaveLength(1);
+    expect(jobs[0].company).toBe('B');
+  });
+
+  it('does not mutate the shared payload when sorting', async () => {
+    const payload = {
+      schemaVersion: 1,
+      jobs: [
+        { company: 'A', title: 'Old Engineer', url: 'https://x/1', job_category: 'software', updated: '2026-01-01' },
+        { company: 'B', title: 'New Engineer', url: 'https://x/2', job_category: 'software', updated: '2026-10-17' },
+      ],
+    };
+    vi.stubGlobal('fetch', vi.fn(async () => payloadResponse(payload)));
+    const sorted = await fetchAllJobs();
+    const again = await fetchJobsPayload();
+    expect(sorted[0].company).toBe('B');
+    // cached payload keeps its published order
+    expect(again.jobs[0].company).toBe('A');
   });
 });
 
@@ -33,10 +67,10 @@ describe('fetchAllJobs ordering', () => {
   it('sorts English titles first, then newest; undated last within group', async () => {
     vi.stubGlobal('fetch', vi.fn(async () => payloadResponse({
       jobs: [
-        { company: 'A', title: 'מהנדס תוכנה', url: 'https://x/1', updated: '2026-10-17' },
-        { company: 'B', title: 'Old Engineer', url: 'https://x/2', updated: '2026-01-01' },
-        { company: 'C', title: 'New Engineer', url: 'https://x/3', updated: '2026-10-17' },
-        { company: 'D', title: 'Undated Engineer', url: 'https://x/4', updated: null },
+        { company: 'A', title: 'מהנדס תוכנה', url: 'https://x/1', job_category: 'software', updated: '2026-10-17' },
+        { company: 'B', title: 'Old Engineer', url: 'https://x/2', job_category: 'software', updated: '2026-01-01' },
+        { company: 'C', title: 'New Engineer', url: 'https://x/3', job_category: 'software', updated: '2026-10-17' },
+        { company: 'D', title: 'Undated Engineer', url: 'https://x/4', job_category: 'software', updated: null },
       ],
     })));
     const titles = (await fetchAllJobs()).map(j => j.title);
