@@ -34,7 +34,7 @@ const categories = [
   { name: "Finance", slug: "finance", icon: Coins, color: "from-amber-500 to-yellow-600" },
 ];
 
-const FALLBACK_STATS = { jobs: "2,500+", companies: "500+", cities: "50+" };
+const FALLBACK_STATS = { jobs: "7,000+", companies: "600+", cities: "45+" };
 
 export default function Home() {
   const { data: payload } = useQuery({
