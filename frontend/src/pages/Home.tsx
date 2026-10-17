@@ -1,6 +1,6 @@
 import { useState, useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { fetchJobsPayload, JOBS_PAYLOAD_QUERY_KEY } from "@/components/jobs/jobsData";
+import { fetchJobsPayload, isClosed, JOBS_PAYLOAD_QUERY_KEY } from "@/components/jobs/jobsData";
 import { Link, useNavigate } from "react-router-dom";
 import { createPageUrl } from "@/utils";
 import { Button } from "@/components/ui/button";
@@ -53,7 +53,9 @@ export default function Home() {
         { label: "Cities Covered", value: FALLBACK_STATS.cities, icon: MapPin },
       ];
     }
-    const jobs = payload.jobs || [];
+    // Closed tombstones stay in the payload for the jobs-page toggle; the
+    // marketing stats count open jobs only.
+    const jobs = (payload.jobs || []).filter(j => !isClosed(j));
     const companies = new Set(jobs.map(j => j.company)).size;
     const cities = new Set(jobs.flatMap(j => j.cities || [])).size;
     return [

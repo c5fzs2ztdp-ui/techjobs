@@ -193,6 +193,12 @@ export const savedJobsApi = {
       }
       
         if (!response.ok && response.status !== 404) throw new Error('Failed to delete');
+        if (response.status === 404) {
+          // Unknown to the server: remove a pending local record if it is one.
+          const jobs = getLocalJobs();
+          const filtered = jobs.filter(j => j.id !== id);
+          if (filtered.length < jobs.length) { setLocalJobs(filtered); return true; }
+        }
         return response.ok;
       } catch (error) {
         console.error('Backend error, falling back to localStorage:', error);

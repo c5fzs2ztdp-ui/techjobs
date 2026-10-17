@@ -471,3 +471,30 @@ describe('reconcileGuestSavedJobs', () => {
     expect(calls).toBe(0);
   });
 });
+
+describe('savedJobsApi.delete on a pending local record', () => {
+  const pendingJob = {
+    id: 'local-9',
+    job_title: 'Guest Job',
+    company: 'Guest Corp',
+    url: 'http://example.com/job-9',
+    applied: false,
+    applied_date: null,
+    comments: '',
+    created_date: '2026-10-09T00:00:00.000Z',
+  };
+
+  it('removes the local record when the server returns 404', async () => {
+    server.use(http.delete('/api/saved-jobs/local-9', () => new HttpResponse(null, { status: 404 })));
+    localStorage.setItem('techjobs_saved_jobs', JSON.stringify([pendingJob]));
+
+    await expect(savedJobsApi.delete('local-9')).resolves.toBe(true);
+
+    expect(JSON.parse(localStorage.getItem('techjobs_saved_jobs') || '[]')).toHaveLength(0);
+  });
+
+  it('returns false on a plain 404 for an unknown record', async () => {
+    server.use(http.delete('/api/saved-jobs/server-9', () => new HttpResponse(null, { status: 404 })));
+    await expect(savedJobsApi.delete('server-9')).resolves.toBe(false);
+  });
+});
