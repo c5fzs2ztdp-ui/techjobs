@@ -221,9 +221,12 @@ export default function Jobs() {
 
   // Pagination
   const totalPages = Math.ceil(filteredJobs.length / JOBS_PER_PAGE);
+  // A background refetch can shrink the result set while the user sits on a
+  // page that no longer exists; clamp instead of rendering an empty list.
+  const activePage = Math.min(currentPage, Math.max(totalPages, 1));
   const paginatedJobs = filteredJobs.slice(
-    (currentPage - 1) * JOBS_PER_PAGE,
-    currentPage * JOBS_PER_PAGE
+    (activePage - 1) * JOBS_PER_PAGE,
+    activePage * JOBS_PER_PAGE
   );
 
   // Reset to page 1 when filters change
@@ -270,16 +273,16 @@ export default function Jobs() {
       for (let i = 1; i <= totalPages; i++) {
         pages.push(i);
       }
-    } else if (currentPage <= Math.floor(maxPages / 2) + 1) {
+    } else if (activePage <= Math.floor(maxPages / 2) + 1) {
       for (let i = 1; i <= maxPages; i++) {
         pages.push(i);
       }
-    } else if (currentPage >= totalPages - Math.floor(maxPages / 2)) {
+    } else if (activePage >= totalPages - Math.floor(maxPages / 2)) {
       for (let i = totalPages - maxPages + 1; i <= totalPages; i++) {
         pages.push(i);
       }
     } else {
-      const start = currentPage - Math.floor(maxPages / 2);
+      const start = activePage - Math.floor(maxPages / 2);
       for (let i = start; i < start + maxPages; i++) {
         pages.push(i);
       }
@@ -394,7 +397,7 @@ export default function Jobs() {
                       variant="outline"
                       size="sm"
                       onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
-                      disabled={currentPage === 1}
+                      disabled={activePage === 1}
                       aria-label="Previous page" 
                       className="px-2 sm:px-3"
                     >
@@ -405,12 +408,12 @@ export default function Jobs() {
                       {getVisiblePageNumbers().map(pageNum => (
                         <Button
                           key={pageNum}
-                          variant={currentPage === pageNum ? "default" : "outline"}
+                          variant={activePage === pageNum ? "default" : "outline"}
                           size="sm"
                           onClick={() => setCurrentPage(pageNum)}
                           aria-label={`Page ${pageNum}`}
-                          aria-current={currentPage === pageNum ? "page" : undefined}
-                          className={`min-w-[36px] ${currentPage === pageNum ? "bg-iris-600" : ""}`}
+                          aria-current={activePage === pageNum ? "page" : undefined}
+                          className={`min-w-[36px] ${activePage === pageNum ? "bg-iris-600" : ""}`}
                         >
                           {pageNum}
                         </Button>
@@ -421,7 +424,7 @@ export default function Jobs() {
                       variant="outline"
                       size="sm"
                       onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
-                      disabled={currentPage === totalPages}
+                      disabled={activePage === totalPages}
                       aria-label="Next page" 
                       className="px-2 sm:px-3"
                     >
