@@ -55,10 +55,11 @@ export default function Jobs() {
 
   const queryClient = useQueryClient();
 
-  const { data: jobs = [], isLoading } = useQuery({
+  const { data: jobs = [], isLoading, isError, refetch } = useQuery({
     queryKey: JOBS_PAYLOAD_QUERY_KEY,
     queryFn: fetchJobsPayload,
     staleTime: 1000 * 60 * 5, // 5 minutes
+    retry: 2,
     select: selectSortedJobs,
   });
 
@@ -345,6 +346,19 @@ export default function Jobs() {
           <div className="flex-1 overflow-y-auto p-4">
             {isLoading ? (
               <JobsLoader />
+            ) : isError ? (
+              <div className="text-center py-16" role="alert">
+                <Briefcase className="w-16 h-16 text-warm-300 mx-auto mb-4" />
+                <h3 className="text-lg font-medium text-warm-700 mb-2">Jobs could not be loaded</h3>
+                <p className="text-warm-500 mb-4">The live feed did not respond. Check your connection and try again.</p>
+                <button
+                  type="button"
+                  onClick={() => refetch()}
+                  className="px-4 py-2 rounded-lg bg-iris-600 text-white hover:bg-iris-700 transition-colors"
+                >
+                  Retry
+                </button>
+              </div>
             ) : paginatedJobs.length === 0 ? (
               <div className="text-center py-16">
                 <Briefcase className="w-16 h-16 text-warm-300 mx-auto mb-4" />
