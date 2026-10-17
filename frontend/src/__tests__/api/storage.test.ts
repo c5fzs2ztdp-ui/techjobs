@@ -344,16 +344,65 @@ describe('reconcileGuestSavedJobs', () => {
     expect(localStorage.getItem('techjobs_saved_jobs')).toBeNull();
   });
 
-  it('treats a 409 as already-saved (dedupe by URL) and drops the local copy', async () => {
+  it('on a duplicate URL, merges guest application details into the account record before dropping the local copy', async () => {
+    let putBody: Record<string, unknown> | null = null;
     server.use(
+      http.get('/api/saved-jobs', () => {
+        // Account already has the URL, without application details
+        return HttpResponse.json([{ ...mockSavedJobs[0], url: 'http://example.com/job-1', applied: false, applied_date: null, comments: null }]);
+      }),
       http.post('/api/saved-jobs', () => {
         return HttpResponse.json({ error: 'Already exists' }, { status: 409 });
+      }),
+      http.put('/api/saved-jobs/:id', async ({ request }) => {
+        putBody = await request.json() as Record<string, unknown>;
+        return HttpResponse.json({ ...mockSavedJobs[0], ...putBody });
       })
     );
     localStorage.setItem('techjobs_saved_jobs', JSON.stringify([guestJob()]));
 
     await reconcileGuestSavedJobs();
 
+    expect(putBody).toEqual({ applied: true, applied_date: '2026-10-10', comments: 'keep me' });
+    expect(localStorage.getItem('techjobs_saved_jobs')).toBeNull();
+  });
+
+  it('keeps the local copy when the conflict merge fails (retry-safe)', async () => {
+    server.use(
+      http.get('/api/saved-jobs', () => {
+        return HttpResponse.json([{ ...mockSavedJobs[0], url: 'http://example.com/job-1', applied: false }]);
+      }),
+      http.post('/api/saved-jobs', () => {
+        return HttpResponse.json({ error: 'Already exists' }, { status: 409 });
+      }),
+      http.put('/api/saved-jobs/:id', () => {
+        return new HttpResponse(null, { status: 500 });
+      })
+    );
+    localStorage.setItem('techjobs_saved_jobs', JSON.stringify([guestJob()]));
+
+    await reconcileGuestSavedJobs();
+
+    const remaining = JSON.parse(localStorage.getItem('techjobs_saved_jobs') || '[]');
+    expect(remaining).toHaveLength(1);
+  });
+
+  it('does not overwrite account details the account already has', async () => {
+    let putCalls = 0;
+    server.use(
+      http.get('/api/saved-jobs', () => {
+        return HttpResponse.json([{ ...mockSavedJobs[0], url: 'http://example.com/job-1', applied: true, applied_date: '2026-10-01', comments: 'account note' }]);
+      }),
+      http.post('/api/saved-jobs', () => {
+        return HttpResponse.json({ error: 'Already exists' }, { status: 409 });
+      }),
+      http.put('/api/saved-jobs/:id', () => { putCalls += 1; return HttpResponse.json({}); })
+    );
+    localStorage.setItem('techjobs_saved_jobs', JSON.stringify([guestJob()]));
+
+    await reconcileGuestSavedJobs();
+
+    expect(putCalls).toBe(0);
     expect(localStorage.getItem('techjobs_saved_jobs')).toBeNull();
   });
 

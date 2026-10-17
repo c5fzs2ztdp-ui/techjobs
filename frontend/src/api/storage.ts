@@ -201,6 +201,38 @@ export const savedJobsApi = {
 };
 
 /**
+ * On a duplicate URL (409), merge the guest's application details into the
+ * existing account record: applied=true wins, dates and comments fill gaps.
+ * Returns true once the account durably reflects the guest's state (or has
+ * nothing to gain), false when the merge could not complete.
+ */
+async function mergeGuestDetailsIntoAccount(guest: SavedJob): Promise<boolean> {
+  try {
+    const listResponse = await fetch(`${API_BASE_URL}/saved-jobs`, {
+      credentials: 'include',
+    });
+    if (!listResponse.ok) return false;
+    const accountJobs: SavedJob[] = await listResponse.json();
+    const existing = accountJobs.find((j) => j.url === guest.url);
+    if (!existing) return true; // raced delete - nothing to preserve into
+    const merged: Partial<SavedJob> = {};
+    if (guest.applied && !existing.applied) merged.applied = true;
+    if (guest.applied_date && !existing.applied_date) merged.applied_date = guest.applied_date;
+    if (guest.comments && !existing.comments) merged.comments = guest.comments;
+    if (Object.keys(merged).length === 0) return true;
+    const updateResponse = await fetch(`${API_BASE_URL}/saved-jobs/${existing.id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify(merged),
+    });
+    return updateResponse.ok;
+  } catch {
+    return false;
+  }
+}
+
+/**
  * Upload guest saves/applies to the account before the UI switches to
  * account storage. Retry-safe: the server deduplicates by URL (a 409 counts
  * as uploaded), applied dates/comments are preserved, and records whose
@@ -233,9 +265,18 @@ export async function reconcileGuestSavedJobs(): Promise<void> {
         credentials: 'include',
         body: JSON.stringify(record),
       });
-      // 2xx: uploaded. 409: the account already has this URL - dedupe, drop the copy.
+      // 2xx: uploaded. 409: the account already has this URL - merge the
+      // guest's application details into the account record first, and only
+      // then drop the local copy.
       if (!response.ok && response.status !== 409) {
         remaining.push(job);
+        continue;
+      }
+      if (response.status === 409) {
+        const merged = await mergeGuestDetailsIntoAccount(job);
+        if (!merged) {
+          remaining.push(job); // merge failed - keep for next time
+        }
       }
     } catch {
       remaining.push(job); // network failure - keep for next time

@@ -162,6 +162,9 @@ const TITLE_RULES = [
   ['hardware-electronics', /hardware|fpga|asic|vlsi|embedded|firmware|\bsilicon\b|electronics|\bpcb\b|\brf engineer|board design|validation engineer|חומרה|אלקטרוניקה|מהנדס\/?\.?ת? מערכ|אינטגרציה|שילובים|תקשורת|ניווט/],
   ['mechanical-manufacturing', /mechanical|mechatronics|manufacturing|production (engineer|manager|operator|worker|line)|machinist|technician|maintenance|\bcnc\b|welder|electrician|industrial engineer|process engineer|quality (engineer|technician|inspector|systems|manager)|מכונות|מכאנ|מכונאי|טכנאי|תכן|מכני|מתקין|יצור|טכנולוג(\.?ית)?(?![א-ת])|technologist|אחזקה|ייצור|תעשייה וניהול|מהנדס\/?\.?ת? תעשייה|חשמלאי|רתך|מסגר|איכות|הנדסאי|מכטרוניקה|בקרת הינע/],
   ['design', /designer|\bux\b|\bui\b|graphic|motion design|מעצב|חוויית? משתמש|גרפיק/],
+  // Specific support roles must match before the general account-manager
+  // sales rule below - first match wins.
+  ['customer-support', /technical account manager|\btam\b/],
   ['sales', /sales|account executive|account manager|business development|\bbdr\b|\bsdr\b|pre-?sales|מכירות|פיתוח עסקי|מנהל\/?\.?ת? לקוחות|יועץ\/?\.?ת? מכירות/],
   ['customer-support', /customer (support|success|service|experience)|technical support|help ?desk|support (engineer|specialist|representative)|\btam\b|technical account manager|client services?|professional services|שירות לקוחות|נציג\/?\.?ת?( שירות| |$)|תמיכה|מוקד|הצלחת לקוח/],
   ['marketing', /marketing|growth (manager|marketing)|\bseo\b|content (writer|manager)|brand|demand generation|campaign|copywriter|social media|שיווק|משווק|מותג|קמפיין|דיגיטל/],
