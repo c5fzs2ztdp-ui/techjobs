@@ -1,4 +1,6 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
+import { useQuery } from '@tanstack/react-query';
+import { fetchJobsPayload } from "@/components/jobs/jobsData";
 import { Link, useNavigate } from "react-router-dom";
 import { createPageUrl } from "@/utils";
 import { Button } from "@/components/ui/button";
@@ -20,27 +22,39 @@ import {
 import { motion } from "framer-motion";
 import AddCompanyModal from "@/components/AddCompanyModal";
 
+// Industry cards link to the closest role-category slug in the jobs taxonomy.
 const categories = [
-  { name: "AI/ML", icon: Cpu, color: "from-violet-500 to-purple-600" },
-  { name: "Cybersecurity", icon: Shield, color: "from-emerald-500 to-teal-600" },
-  { name: "Gaming", icon: Gamepad2, color: "from-pink-500 to-rose-600" },
-  { name: "Health", icon: HeartPulse, color: "from-red-500 to-orange-600" },
-  { name: "Fintech", icon: Coins, color: "from-amber-500 to-yellow-600" },
-  { name: "Aerospace", icon: Rocket, color: "from-blue-500 to-cyan-600" },
+  { name: "AI/ML", slug: "data-ai", icon: Cpu, color: "from-violet-500 to-purple-600" },
+  { name: "Cybersecurity", slug: "security", icon: Shield, color: "from-emerald-500 to-teal-600" },
+  { name: "Gaming", slug: "software", icon: Gamepad2, color: "from-pink-500 to-rose-600" },
+  { name: "Health", slug: "other", icon: HeartPulse, color: "from-red-500 to-orange-600" },
+  { name: "Fintech", slug: "finance", icon: Coins, color: "from-amber-500 to-yellow-600" },
+  { name: "Aerospace", slug: "hardware-electronics", icon: Rocket, color: "from-blue-500 to-cyan-600" },
 ];
 
-const stats = [
-  { label: "Active Jobs", value: "2,500+", icon: Briefcase },
-  { label: "Tech Companies", value: "500+", icon: Building2 },
-  { label: "Cities Covered", value: "50+", icon: MapPin },
-];
+const FALLBACK_STATS = { jobs: "2,500+", companies: "500+", cities: "50+" };
 
 export default function Home() {
+  const { data: payload } = useQuery({
+    queryKey: ['jobsPayload'],
+    queryFn: fetchJobsPayload,
+    staleTime: 1000 * 60 * 5,
+  });
+  const stats = useMemo(() => {
+    const jobs = payload?.jobs || [];
+    const companies = new Set(jobs.map(j => j.company)).size;
+    const cities = new Set(jobs.flatMap(j => j.cities || [])).size;
+    return [
+      { label: "Active Jobs", value: jobs.length ? jobs.length.toLocaleString() : FALLBACK_STATS.jobs, icon: Briefcase },
+      { label: "Tech Companies", value: companies ? companies.toLocaleString() : FALLBACK_STATS.companies, icon: Building2 },
+      { label: "Cities Covered", value: cities ? String(cities) : FALLBACK_STATS.cities, icon: MapPin },
+    ];
+  }, [payload]);
   const navigate = useNavigate();
   const [showAddCompany, setShowAddCompany] = useState(false);
 
-  const handleCategoryClick = (categoryName: string) => {
-    navigate(`${createPageUrl("Jobs")}?category=${encodeURIComponent(categoryName)}`);
+  const handleCategoryClick = (categorySlug: string) => {
+    navigate(`${createPageUrl("Jobs")}?category=${encodeURIComponent(categorySlug)}`);
   };
 
   return (
@@ -154,7 +168,7 @@ export default function Home() {
             >
               <Card
                 className="group cursor-pointer hover:shadow-xl transition-all duration-300 overflow-hidden border-0 bg-white rounded-2xl card-hover"
-                onClick={() => handleCategoryClick(category.name)}
+                onClick={() => handleCategoryClick(category.slug)}
               >
                 <CardContent className="p-6 text-center">
                   <div className={`w-14 h-14 mx-auto mb-4 rounded-2xl bg-gradient-to-br ${category.color} flex items-center justify-center transform group-hover:scale-110 transition-transform`}>
