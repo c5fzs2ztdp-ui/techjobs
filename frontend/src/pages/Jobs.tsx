@@ -38,7 +38,9 @@ export default function Jobs() {
     // Ignore a param that is not a real taxonomy slug or canonical city: an
     // unknown value would silently filter the board to zero jobs with no
     // visible filter chip explaining why.
-    if (initialCategoryParam && CATEGORY_LABELS[initialCategoryParam]) {
+    // Own-property check: CATEGORY_LABELS is a plain object, so inherited
+    // keys like 'toString' or '__proto__' must not be accepted as slugs.
+    if (initialCategoryParam && Object.prototype.hasOwnProperty.call(CATEGORY_LABELS, initialCategoryParam)) {
       setFilters(prev => ({ ...prev, jobCategories: [initialCategoryParam] }));
     } else {
       // Like the city param: navigating from /jobs?category=qa to plain
@@ -283,7 +285,8 @@ export default function Jobs() {
     filters.employmentTypes.length +
     filters.seniorities.length +
     filters.cities.length +
-    filters.regions.length;
+    filters.regions.length +
+    (filters.showClosed ? 1 : 0);
 
   const isJobSaved = (job: Job) => savedJobs.some(s => s.url === job.url);
   const isJobApplied = (job: Job) => savedJobs.some(s => s.url === job.url && s.applied);

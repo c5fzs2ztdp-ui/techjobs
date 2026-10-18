@@ -80,6 +80,23 @@ function setLocalCompanies(companies: Company[]): void {
   localStorage.setItem(COMPANIES_KEY, JSON.stringify(companies));
 }
 
+// Shared by the 401 and offline create fallbacks: dedupe by URL among
+// UNCLAIMED guest records only - a record synced to an account is invisible
+// to a logged-out guest and must not swallow their save.
+function createLocalGuestSave(job: Omit<SavedJob, 'id' | 'created_date'>): SavedJob {
+  const jobs = getLocalJobs();
+  const existing = jobs.find((j) => j.url === job.url && !j.syncedTo);
+  if (existing) return existing;
+  const newJob: SavedJob = {
+    ...job,
+    id: crypto.randomUUID(),
+    created_date: new Date().toISOString(),
+  };
+  jobs.push(newJob);
+  setLocalJobs(jobs);
+  return newJob;
+}
+
 // SavedJob operations
 export const savedJobsApi = {
   list: async (sortBy?: string): Promise<SavedJob[]> => {
@@ -157,19 +174,8 @@ export const savedJobsApi = {
         });
       
       if (response.status === 401) {
-        // Not authenticated - use localStorage. Dedupe by URL: a rapid
-        // double-save (before the list invalidates) must not create twins.
-        const jobs = getLocalJobs();
-        const existing = jobs.find((j) => j.url === job.url);
-        if (existing) return existing;
-        const newJob: SavedJob = {
-          ...job,
-          id: crypto.randomUUID(),
-          created_date: new Date().toISOString(),
-        };
-        jobs.push(newJob);
-        setLocalJobs(jobs);
-        return newJob;
+        // Not authenticated - dedupe against unclaimed guest records only.
+        return createLocalGuestSave(job);
       }
       
         if (!response.ok) {
@@ -184,15 +190,8 @@ export const savedJobsApi = {
         return await response.json();
       } catch (error) {
         console.error('Backend error, falling back to localStorage:', error);
-    const jobs = getLocalJobs();
-    const newJob: SavedJob = {
-      ...job,
-      id: crypto.randomUUID(),
-      created_date: new Date().toISOString(),
-    };
-    jobs.push(newJob);
-    setLocalJobs(jobs);
-    return newJob;
+    // Same dedupe as the 401 path: an offline double-save must not twin.
+    return createLocalGuestSave(job);
     }
   },
 
@@ -512,6 +511,11 @@ async function runReconcileGuestSavedJobs(): Promise<number> {
     // A save already synced to a different account (an earlier sign-in on
     // this browser) is left untouched instead of duplicating into this one.
     if (current.syncedTo && current.syncedTo !== accountId) continue;
+    // Requests carry the browser's CURRENT session cookie, which another tab
+    // can change mid-run: re-check the identity before every write, and stop
+    // the run if it changed - A-owned records must not upload under B.
+    const beforeWrite = await getAuthenticatedAccountId();
+    if (beforeWrite !== accountId) break;
     // The server assigns its own id/created_date; everything else
     // (including applied state, dates and comments) is preserved. Built
     // from the live record so edits made before this item's turn upload too.
@@ -549,6 +553,14 @@ async function runReconcileGuestSavedJobs(): Promise<number> {
           remaining.push(current); // merge failed - keep for next time
           continue;
         }
+      }
+      // If the session flipped while the request was in flight, the write
+      // may have landed under a different account: keep the record local and
+      // unstamped rather than recording it as synced to the old account.
+      const afterWrite = await getAuthenticatedAccountId();
+      if (afterWrite !== accountId) {
+        remaining.push(current);
+        continue;
       }
       // The user may have deleted this record while its own upload was in
       // flight: undo a fresh 2xx upload so the delete stays deleted.
