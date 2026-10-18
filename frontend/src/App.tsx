@@ -1,5 +1,5 @@
-import { lazy, Suspense } from 'react';
-import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
+import { lazy, Suspense, useEffect } from 'react';
+import { BrowserRouter as Router, Routes, Route, useLocation } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import ErrorBoundary from '@/components/ErrorBoundary';
 import AuthErrorToast from '@/components/AuthErrorToast';
@@ -22,6 +22,28 @@ const TermsOfService = lazy(() => import('@/pages/TermsOfService'));
 const AccessibilityStatement = lazy(() => import('@/pages/AccessibilityStatement'));
 const NotFound = lazy(() => import('@/pages/NotFound'));
 
+// Per-route document titles (SEO + screen readers announce page changes).
+const PAGE_TITLES: [RegExp, string][] = [
+  [/^\/$/, 'TechJobsIL - Israeli Tech Jobs'],
+  [/^\/jobs/, 'Jobs - TechJobsIL'],
+  [/^\/companies/, 'Companies - TechJobsIL'],
+  [/^\/company/, 'Company Profile - TechJobsIL'],
+  [/^\/saved/, 'Saved Jobs - TechJobsIL'],
+  [/^\/map/, 'Jobs Map - TechJobsIL'],
+  [/^\/privacy/, 'Privacy Policy - TechJobsIL'],
+  [/^\/terms/, 'Terms of Service - TechJobsIL'],
+  [/^\/accessibility/, 'Accessibility Statement - TechJobsIL'],
+];
+
+function PageTitle() {
+  const { pathname } = useLocation();
+  useEffect(() => {
+    const match = PAGE_TITLES.find(([re]) => re.test(pathname));
+    document.title = match ? match[1] : 'Page Not Found - TechJobsIL';
+  }, [pathname]);
+  return null;
+}
+
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
@@ -35,6 +57,7 @@ function App() {
   return (
     <QueryClientProvider client={queryClient}>
       <Router>
+        <PageTitle />
         <AuthErrorToast />
         <ErrorBoundary>
         <Suspense fallback={<div className="min-h-[60vh] flex items-center justify-center text-warm-500">Loading...</div>}>
