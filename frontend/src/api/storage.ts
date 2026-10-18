@@ -19,6 +19,13 @@ export interface SavedJob {
   created_date: string;
   /** Guest record whose upload to the account has not completed yet. */
   pending?: boolean;
+  /**
+   * Guest-only sync bookkeeping: the mergeable field values as of the last
+   * successful upload to the account. Lets reconciliation tell "edited
+   * locally after upload" (local edit wins) apart from "never uploaded"
+   * (account copy wins ties). Stripped before any server payload.
+   */
+  lastUploaded?: { applied?: boolean; applied_date?: string; comments?: string };
 }
 
 export interface Company {
@@ -94,11 +101,22 @@ export const savedJobsApi = {
         // Guest records whose upload has not completed stay visible alongside
         // account saves, marked pending - otherwise a failed reconciliation
         // looks like "No saved jobs yet" after sign-in.
+        const localJobs = getLocalJobs();
         const serverUrls = new Set(serverJobs.map((j) => j.url));
-        const pending = getLocalJobs()
+        const pending = localJobs
           .filter((j) => !serverUrls.has(j.url))
           .map((j) => ({ ...j, pending: true }));
-        return [...pending, ...serverJobs];
+        // A local record sharing a URL with an account row is an unresolved
+        // duplicate (a failed conflict merge or an edit made after upload).
+        // Flag the account row as pending too, so pendingCount, the banner
+        // and the Retry sync action reflect the unsynced local details.
+        const unresolvedUrls = new Set(
+          localJobs.filter((j) => serverUrls.has(j.url)).map((j) => j.url),
+        );
+        return [
+          ...pending,
+          ...serverJobs.map((j) => (unresolvedUrls.has(j.url) ? { ...j, pending: true } : j)),
+        ];
       } catch (error) {
         console.error('Backend error, falling back to localStorage:', error);
     const jobs = getLocalJobs();
@@ -247,10 +265,21 @@ async function mergeGuestDetailsIntoAccount(guest: SavedJob): Promise<boolean> {
     const accountJobs: SavedJob[] = await listResponse.json();
     const existing = accountJobs.find((j) => j.url === guest.url);
     if (!existing) return true; // raced delete - nothing to preserve into
+    // A field changed locally since the last successful upload is an
+    // unresolved edit and wins over the account copy (including clearing a
+    // comment or unmarking an application). A field that was never uploaded
+    // keeps the conservative gap-fill: the account's own value is never
+    // clobbered by stale guest data.
+    const last = guest.lastUploaded ?? {};
+    const dirty = {
+      applied: 'applied' in last && guest.applied !== last.applied,
+      applied_date: 'applied_date' in last && guest.applied_date !== last.applied_date,
+      comments: 'comments' in last && guest.comments !== last.comments,
+    };
     const merged: Partial<SavedJob> = {};
-    if (guest.applied && !existing.applied) merged.applied = true;
-    if (guest.applied_date && !existing.applied_date) merged.applied_date = guest.applied_date;
-    if (guest.comments && !existing.comments) merged.comments = guest.comments;
+    if (dirty.applied ? true : guest.applied && !existing.applied) merged.applied = guest.applied;
+    if (dirty.applied_date ? true : guest.applied_date && !existing.applied_date) merged.applied_date = guest.applied_date;
+    if (dirty.comments ? true : guest.comments && !existing.comments) merged.comments = guest.comments;
     if (Object.keys(merged).length === 0) return true;
     const updateResponse = await fetch(`${API_BASE_URL}/saved-jobs/${existing.id}`, {
       method: 'PUT',
@@ -270,27 +299,43 @@ async function mergeGuestDetailsIntoAccount(guest: SavedJob): Promise<boolean> {
  * as uploaded), applied dates/comments are preserved, and records whose
  * upload failed stay in localStorage for the next reconciliation attempt.
  */
+// Sync metadata must not take part in the before/after upload comparison.
+function stripSyncMeta(job: SavedJob): Omit<SavedJob, 'lastUploaded'> {
+  const { lastUploaded, ...rest } = job;
+  void lastUploaded;
+  return rest;
+}
+
 export async function reconcileGuestSavedJobs(): Promise<number> {
   const local = getLocalJobs();
   if (local.length === 0) return 0;
   const remaining: SavedJob[] = [];
+  // Records uploaded this run: id -> JSON snapshot of what was uploaded.
+  const uploadedSnapshots = new Map<string, string>();
   for (const job of local) {
+    // Recheck the live record before uploading each queued item: a delete
+    // that landed while a previous upload was in flight wins, and the
+    // deleted record must not be resurrected on the account.
+    const current = getLocalJobs().find((j) => j.id === job.id);
+    if (!current) continue;
+    // The server assigns its own id/created_date; everything else
+    // (including applied state, dates and comments) is preserved. Built
+    // from the live record so edits made before this item's turn upload too.
+    const record: Omit<SavedJob, 'id' | 'created_date'> = {
+      job_title: current.job_title,
+      company: current.company,
+      category: current.category,
+      city: current.city,
+      url: current.url,
+      level: current.level,
+      size: current.size,
+      job_category: current.job_category,
+      applied: current.applied,
+      applied_date: current.applied_date,
+      comments: current.comments,
+    };
+    const snapshot = JSON.stringify(stripSyncMeta(current));
     try {
-      // The server assigns its own id/created_date; everything else
-      // (including applied state, dates and comments) is preserved.
-      const record: Omit<SavedJob, 'id' | 'created_date'> = {
-        job_title: job.job_title,
-        company: job.company,
-        category: job.category,
-        city: job.city,
-        url: job.url,
-        level: job.level,
-        size: job.size,
-        job_category: job.job_category,
-        applied: job.applied,
-        applied_date: job.applied_date,
-        comments: job.comments,
-      };
       const response = await fetch(`${API_BASE_URL}/saved-jobs`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -301,28 +346,47 @@ export async function reconcileGuestSavedJobs(): Promise<number> {
       // guest's application details into the account record first, and only
       // then drop the local copy.
       if (!response.ok && response.status !== 409) {
-        remaining.push(job);
+        remaining.push(current);
         continue;
       }
       if (response.status === 409) {
-        const merged = await mergeGuestDetailsIntoAccount(job);
+        const merged = await mergeGuestDetailsIntoAccount(current);
         if (!merged) {
-          remaining.push(job); // merge failed - keep for next time
+          remaining.push(current); // merge failed - keep for next time
+          continue;
         }
       }
+      // The user may have deleted this record while its own upload was in
+      // flight: undo a fresh 2xx upload so the delete stays deleted.
+      const stillLocal = getLocalJobs().find((j) => j.id === job.id);
+      if (!stillLocal) {
+        if (response.ok) {
+          const created: SavedJob | null = await response.json().catch(() => null);
+          if (created?.id) {
+            await fetch(`${API_BASE_URL}/saved-jobs/${created.id}`, {
+              method: 'DELETE',
+              credentials: 'include',
+            }).catch(() => {});
+          }
+        }
+        continue;
+      }
+      uploadedSnapshots.set(job.id, snapshot);
+      // Remember what the account now holds so the next reconciliation can
+      // tell a later local edit apart from never-uploaded guest data.
+      const stamped = getLocalJobs().map((j) =>
+        j.id === job.id
+          ? { ...j, lastUploaded: { applied: record.applied, applied_date: record.applied_date, comments: record.comments } }
+          : j,
+      );
+      setLocalJobs(stamped);
     } catch {
-      remaining.push(job); // network failure - keep for next time
+      remaining.push(current); // network failure - keep for next time
     }
   }
-  const pendingIds = new Set(remaining.map((job) => job.id));
-  const uploadedSnapshots = new Map(
-    local
-      .filter((job) => !pendingIds.has(job.id))
-      .map((job) => [job.id, JSON.stringify(job)] as const),
-  );
   // Preserve saves and edits made while the uploads were in flight.
   const next = getLocalJobs().filter(
-    (job) => uploadedSnapshots.get(job.id) !== JSON.stringify(job),
+    (job) => uploadedSnapshots.get(job.id) !== JSON.stringify(stripSyncMeta(job)),
   );
   if (next.length === 0) {
     localStorage.removeItem(SAVED_JOBS_KEY);
