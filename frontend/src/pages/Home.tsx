@@ -34,7 +34,7 @@ const categories = [
   { name: "Finance", slug: "finance", icon: Coins, color: "from-amber-500 to-yellow-600" },
 ];
 
-const FALLBACK_STATS = { jobs: "7,000+", companies: "600+", cities: "45+" };
+const FALLBACK_STATS = { jobs: "5,000+", companies: "600+", cities: "45+" };
 
 export default function Home() {
   const { data: payload } = useQuery({
@@ -59,7 +59,9 @@ export default function Home() {
     const companies = new Set(jobs.map(j => j.company)).size;
     const cities = new Set(jobs.flatMap(j => j.cities || [])).size;
     return [
-      { label: "Active Jobs", value: jobs.length.toLocaleString(), icon: Briefcase },
+      // Marketing-style figure, rounded down to a stable 5k step rather than
+      // the exact live count (requested: show "5,000+", not "7,015").
+      { label: "Active Jobs", value: `${(Math.floor(jobs.length / 5000) * 5000).toLocaleString()}+`, icon: Briefcase },
       { label: "Tech Companies", value: companies.toLocaleString(), icon: Building2 },
       { label: "Cities Covered", value: String(cities), icon: MapPin },
     ];
