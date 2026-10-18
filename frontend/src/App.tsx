@@ -1,6 +1,7 @@
 import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import ErrorBoundary from '@/components/ErrorBoundary';
+import AuthErrorToast from '@/components/AuthErrorToast';
 import { Toaster } from 'sonner';
 
 import Layout from '@/components/Layout';
@@ -28,6 +29,7 @@ function App() {
   return (
     <QueryClientProvider client={queryClient}>
       <Router>
+        <AuthErrorToast />
         <ErrorBoundary>
         <Routes>
           <Route
