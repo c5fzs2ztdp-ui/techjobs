@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-import { deriveJobCategory, deriveRegions, normalizeCity } from './convert_jobs.mjs';
+import { deriveJobCategory, deriveRegions, isForeignOnlyListing, normalizeCity } from './convert_jobs.mjs';
 
 // Regression: Strauss screenshot cases - Hebrew titles must never default to software.
 test('strauss HR recruiting manager -> hr', () => {
@@ -252,4 +252,17 @@ test('electrical sustaining & test engineering -> hardware-electronics', () => {
 test('software test engineer stays qa', () => {
   assert.equal(deriveJobCategory('Software Test Engineer', null), 'qa');
   assert.equal(deriveJobCategory('Test Engineer', null), 'qa');
+});
+
+// Explicitly foreign-only listings are excluded; Israel-inclusive ones kept.
+test('foreign-only listing detection', () => {
+  assert.equal(isForeignOnlyListing({ location: 'Electrical Technician (Illinois) - Mount Vernon, IL, United States' }), true);
+  assert.equal(isForeignOnlyListing({ location: 'New York, NY, United States' }), true);
+  assert.equal(isForeignOnlyListing({ location: 'London, United Kingdom' }), true);
+  assert.equal(isForeignOnlyListing({ location: 'USA / IL' }), false);
+  assert.equal(isForeignOnlyListing({ location: 'Tel Aviv, Israel / New York, United States' }), false);
+  assert.equal(isForeignOnlyListing({ location: 'West Palm Beach OR New York OR Ramat Gan OR Singapore' }), false);
+  assert.equal(isForeignOnlyListing({ location: 'Petah Tikva, IL' }), false);
+  assert.equal(isForeignOnlyListing({ location: 'Tel Aviv' }), false);
+  assert.equal(isForeignOnlyListing({ location: null }), false);
 });

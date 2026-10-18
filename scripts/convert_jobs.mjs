@@ -238,6 +238,28 @@ export function deriveJobCategory(title, department) {
   return titleCat || 'other';
 }
 
+// A listing explicitly located only outside Israel (e.g. "Mount Vernon,
+// IL, United States") does not belong on an Israeli board. Multi-location
+// roles that genuinely include Israel (an Israel mention, a trailing "IL"
+// country code, or a canonical Israeli city) are preserved.
+const FOREIGN_COUNTRY_NAME = /\bunited kingdom\b|\bUK\b|\bgermany\b|\bindia\b|\bpoland\b|\bromania\b|\bcanada\b|\baustralia\b|\bfrance\b|\bnetherlands\b|\bspain\b|\bireland\b|\bjapan\b|\bsingapore\b|\bunited states\b/i;
+// Case-sensitive on purpose: bare "us" is an ordinary English word.
+const US_ABBR = /\bUSA\b|\bU\.S\.A?\.?\b/;
+const ISRAEL_MARK = /israel|ישראל/i;
+export function isForeignOnlyListing(j) {
+  const loc = typeof j.location === 'string' && j.location ? j.location
+    : typeof j.city === 'string' ? j.city : '';
+  if (!loc) return false;
+  if (!FOREIGN_COUNTRY_NAME.test(loc) && !US_ABBR.test(loc)) return false;
+  if (ISRAEL_MARK.test(loc)) return false;
+  // "City, IL" / "USA / IL": a standalone trailing IL is the Israel country
+  // code used by Israeli boards (e.g. Comeet), not Illinois.
+  if (/(^|[\/,;|])\s*IL\s*$/.test(loc.trim())) return false;
+  // A canonical Israeli city anywhere in the location means the role
+  // genuinely includes Israel.
+  return normalizeCity(loc).city === null;
+}
+
 // --- Convert ---
 if (isMain) {
 
@@ -255,7 +277,10 @@ if (!Array.isArray(raw)) { console.error('Input is not a JSON array'); process.e
 const sourceRows = raw.filter(j => j !== null && typeof j === 'object' && !Array.isArray(j));
 const droppedRows = raw.length - sourceRows.length;
 if (droppedRows > 0) console.warn(`convert_jobs: dropped ${droppedRows} malformed row(s)`);
-const jobs = sourceRows.map(j => {
+const israeliRows = sourceRows.filter(j => !isForeignOnlyListing(j));
+const foreignOnly = sourceRows.length - israeliRows.length;
+if (foreignOnly > 0) console.warn(`convert_jobs: dropped ${foreignOnly} explicitly foreign-only row(s)`);
+const jobs = israeliRows.map(j => {
   const { city, cityHe } = normalizeCity(
     (typeof j.city === 'string' && j.city) || (typeof j.location === 'string' && j.location) || null,
   );
