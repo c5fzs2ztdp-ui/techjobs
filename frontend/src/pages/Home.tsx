@@ -1,4 +1,6 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
+import { useQuery } from '@tanstack/react-query';
+import { fetchJobsPayload, isClosed, JOBS_PAYLOAD_QUERY_KEY } from "@/components/jobs/jobsData";
 import { Link, useNavigate } from "react-router-dom";
 import { createPageUrl } from "@/utils";
 import { Button } from "@/components/ui/button";
@@ -9,10 +11,10 @@ import {
   Building2,
   Search,
   ArrowRight,
+  Code2,
   Cpu,
   Shield,
-  Gamepad2,
-  HeartPulse,
+  Server,
   Coins,
   Rocket,
   Plus,
@@ -20,27 +22,53 @@ import {
 import { motion } from "framer-motion";
 import AddCompanyModal from "@/components/AddCompanyModal";
 
+// Role-category cards link to role-category slugs in the jobs taxonomy
+// (CATEGORY_LABELS in jobsData) - labels and destinations are the same
+// concept, so no industry/occupation conflation.
 const categories = [
-  { name: "AI/ML", icon: Cpu, color: "from-violet-500 to-purple-600" },
-  { name: "Cybersecurity", icon: Shield, color: "from-emerald-500 to-teal-600" },
-  { name: "Gaming", icon: Gamepad2, color: "from-pink-500 to-rose-600" },
-  { name: "Health", icon: HeartPulse, color: "from-red-500 to-orange-600" },
-  { name: "Fintech", icon: Coins, color: "from-amber-500 to-yellow-600" },
-  { name: "Aerospace", icon: Rocket, color: "from-blue-500 to-cyan-600" },
+  { name: "Software", slug: "software", icon: Code2, color: "from-pink-500 to-rose-600" },
+  { name: "Data & AI", slug: "data-ai", icon: Cpu, color: "from-violet-500 to-purple-600" },
+  { name: "Security", slug: "security", icon: Shield, color: "from-emerald-500 to-teal-600" },
+  { name: "DevOps & Infrastructure", slug: "devops", icon: Server, color: "from-blue-500 to-cyan-600" },
+  { name: "Product", slug: "product", icon: Rocket, color: "from-indigo-500 to-blue-600" },
+  { name: "Finance", slug: "finance", icon: Coins, color: "from-amber-500 to-yellow-600" },
 ];
 
-const stats = [
-  { label: "Active Jobs", value: "2,500+", icon: Briefcase },
-  { label: "Tech Companies", value: "500+", icon: Building2 },
-  { label: "Cities Covered", value: "50+", icon: MapPin },
-];
+const FALLBACK_STATS = { jobs: "7,000+", companies: "600+", cities: "45+" };
 
 export default function Home() {
+  const { data: payload } = useQuery({
+    queryKey: JOBS_PAYLOAD_QUERY_KEY,
+    queryFn: fetchJobsPayload,
+    staleTime: 1000 * 60 * 5,
+  });
+  // Branch on payload availability, not on the numeric counts: after a
+  // successful load the real values render (including zero); the marketing
+  // fallback shows only while loading or after an error.
+  const stats = useMemo(() => {
+    if (!payload) {
+      return [
+        { label: "Active Jobs", value: FALLBACK_STATS.jobs, icon: Briefcase },
+        { label: "Tech Companies", value: FALLBACK_STATS.companies, icon: Building2 },
+        { label: "Cities Covered", value: FALLBACK_STATS.cities, icon: MapPin },
+      ];
+    }
+    // Closed tombstones stay in the payload for the jobs-page toggle; the
+    // marketing stats count open jobs only.
+    const jobs = (payload.jobs || []).filter(j => !isClosed(j));
+    const companies = new Set(jobs.map(j => j.company)).size;
+    const cities = new Set(jobs.flatMap(j => j.cities || [])).size;
+    return [
+      { label: "Active Jobs", value: jobs.length.toLocaleString(), icon: Briefcase },
+      { label: "Tech Companies", value: companies.toLocaleString(), icon: Building2 },
+      { label: "Cities Covered", value: String(cities), icon: MapPin },
+    ];
+  }, [payload]);
   const navigate = useNavigate();
   const [showAddCompany, setShowAddCompany] = useState(false);
 
-  const handleCategoryClick = (categoryName: string) => {
-    navigate(`${createPageUrl("Jobs")}?category=${encodeURIComponent(categoryName)}`);
+  const handleCategoryClick = (categorySlug: string) => {
+    navigate(`${createPageUrl("Jobs")}?category=${encodeURIComponent(categorySlug)}`);
   };
 
   return (
@@ -85,7 +113,7 @@ export default function Home() {
               <Button
                 asChild
                 size="lg"
-                className="bg-copper-500 text-white hover:bg-copper-600 text-lg px-8 py-6 rounded-xl shadow-xl shadow-black/20"
+                className="bg-copper-700 text-white hover:bg-copper-800 text-lg px-8 py-6 rounded-xl shadow-xl shadow-black/20"
               >
                 <Link to={createPageUrl("Jobs")}>
                   <Search className="w-5 h-5 mr-2" />
@@ -137,10 +165,10 @@ export default function Home() {
       <div className="max-w-7xl mx-auto px-4 py-20">
         <div className="text-center mb-12">
           <h2 className="text-3xl md:text-4xl font-bold text-warm-900 mb-4">
-            Browse by Industry
+            Browse by Role
           </h2>
           <p className="text-lg text-warm-600 max-w-2xl mx-auto">
-            From AI and Cybersecurity to Gaming and Fintech — find your niche
+            From software engineering to data science, find your role
           </p>
         </div>
 
@@ -154,7 +182,7 @@ export default function Home() {
             >
               <Card
                 className="group cursor-pointer hover:shadow-xl transition-all duration-300 overflow-hidden border-0 bg-white rounded-2xl card-hover"
-                onClick={() => handleCategoryClick(category.name)}
+                onClick={() => handleCategoryClick(category.slug)}
               >
                 <CardContent className="p-6 text-center">
                   <div className={`w-14 h-14 mx-auto mb-4 rounded-2xl bg-gradient-to-br ${category.color} flex items-center justify-center transform group-hover:scale-110 transition-transform`}>
@@ -192,7 +220,7 @@ export default function Home() {
           <Button
             asChild
             size="lg"
-            className="bg-copper-500 hover:bg-copper-600 text-lg px-8 py-6 rounded-xl"
+            className="bg-copper-700 hover:bg-copper-800 text-lg px-8 py-6 rounded-xl"
           >
             <Link to={createPageUrl("Jobs")}>
               Start Searching Now
@@ -206,10 +234,10 @@ export default function Home() {
       <footer className="bg-warm-900 py-8">
         <div className="max-w-7xl mx-auto px-4 text-center space-y-4">
           <Button
-            variant="outline"
+            variant="ghost"
             size="sm"
             onClick={() => setShowAddCompany(true)}
-            className="border-warm-700 text-warm-300 hover:text-white hover:bg-warm-800 gap-2"
+            className="border border-warm-700 text-warm-300 hover:text-white hover:bg-warm-800 gap-2"
             aria-label="Add your company to TechJobsIL"
           >
             <Plus className="w-4 h-4" aria-hidden="true" />
@@ -234,7 +262,7 @@ export default function Home() {
             </Button>
           </nav>
 
-          <p className="text-warm-500 text-xs">
+          <p className="text-warm-400 text-xs">
             © {new Date().getFullYear()} TechJobsIL. All rights reserved.
           </p>
         </div>

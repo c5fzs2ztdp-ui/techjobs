@@ -7,11 +7,12 @@ import { Briefcase, ChevronLeft, ChevronRight, Building2 } from "lucide-react";
 import { Link, useLocation } from "react-router-dom";
 import { createPageUrl } from "@/utils";
 
-import FilterSidebar, { type Filters } from "@/components/jobs/FilterSidebar";
+import FilterSidebar from "@/components/jobs/FilterSidebar";
+import { EMPTY_FILTERS, type Filters } from "@/components/jobs/filters";
 import SearchHeader from "@/components/jobs/SearchHeader";
 import JobCard from "@/components/jobs/JobCard";
 import JobsLoader from "@/components/jobs/JobsLoader";
-import { fetchAllJobs, type Job } from "@/components/jobs/jobsData";
+import { CATEGORY_LABELS, displayCity, fetchJobsPayload, isClosed, JOBS_PAYLOAD_QUERY_KEY, selectCityLabels, selectSortedJobs, type Job } from "@/components/jobs/jobsData";
 import { savedJobsApi } from "@/api/storage";
 
 // Types for mutation results
@@ -22,27 +23,40 @@ const JOBS_PER_PAGE = 20;
 
 export default function Jobs() {
   const posthog = usePostHog();
-  const [filters, setFilters] = useState<Filters>({
-    search: '',
-    categories: [],
-    jobCategories: [],
-    levels: [],
-    sizes: [],
-    cities: []
-  });
+  const [filters, setFilters] = useState<Filters>({ ...EMPTY_FILTERS });
   const location = useLocation();
   const searchParams = new URLSearchParams(location.search);
   const initialSearch = searchParams.get('search') || '';
-  const initialCategory = searchParams.get('category') || '';
+  const initialCategoryParam = searchParams.get('category') || '';
+  const initialCity = searchParams.get('city') || '';
 
   const [searchQuery, setSearchQuery] = useState(initialSearch);
 
-  // Apply category from URL on mount
+  // Apply category/city from URL on mount. Categories are role-category
+  // slugs from the jobs taxonomy (see CATEGORY_LABELS in jobsData).
   useEffect(() => {
-    if (initialCategory) {
-      setFilters(prev => ({ ...prev, categories: [initialCategory] }));
+    // Ignore a param that is not a real taxonomy slug or canonical city: an
+    // unknown value would silently filter the board to zero jobs with no
+    // visible filter chip explaining why.
+    // Own-property check: CATEGORY_LABELS is a plain object, so inherited
+    // keys like 'toString' or '__proto__' must not be accepted as slugs.
+    if (initialCategoryParam && Object.prototype.hasOwnProperty.call(CATEGORY_LABELS, initialCategoryParam)) {
+      setFilters(prev => ({ ...prev, jobCategories: [initialCategoryParam] }));
+    } else {
+      // Like the city param: navigating from /jobs?category=qa to plain
+      // /jobs must drop the filter, or the list stays filtered with no URL
+      // state explaining why.
+      setFilters(prev => (prev.jobCategories.length > 0 ? { ...prev, jobCategories: [] } : prev));
     }
-  }, [initialCategory]);
+    if (initialCity) {
+      setFilters(prev => ({ ...prev, cities: [initialCity] }));
+    } else {
+      // The city filter follows the URL: navigating from /jobs?city=X back
+      // to plain /jobs must drop it, or the list stays filtered with no URL
+      // state explaining why.
+      setFilters(prev => (prev.cities.length > 0 ? { ...prev, cities: [] } : prev));
+    }
+  }, [initialCategoryParam, initialCity]);
   const [isFilterOpen, setIsFilterOpen] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
 
@@ -56,10 +70,12 @@ export default function Jobs() {
 
   const queryClient = useQueryClient();
 
-  const { data: jobs = [], isLoading } = useQuery({
-    queryKey: ['jobs'],
-    queryFn: fetchAllJobs,
+  const { data: jobs = [], isLoading, isError, refetch } = useQuery({
+    queryKey: JOBS_PAYLOAD_QUERY_KEY,
+    queryFn: fetchJobsPayload,
     staleTime: 1000 * 60 * 5, // 5 minutes
+    retry: 2,
+    select: selectSortedJobs,
   });
 
   const { data: savedJobs = [] } = useQuery({
@@ -71,17 +87,16 @@ export default function Jobs() {
     mutationFn: async (job: Job): Promise<SaveMutationResult> => {
       const existing = savedJobs.find(s => s.url === job.url);
       if (existing) {
-        await savedJobsApi.delete(existing.id);
+        await savedJobsApi.delete(existing.id, existing.url);
         return { action: 'removed', job };
       } else {
         await savedJobsApi.create({
           job_title: job.title,
           company: job.company,
-          category: job.category,
-          city: job.city,
+          category: job.department || undefined,
+          city: displayCity(job),
           url: job.url,
-          level: job.level,
-          size: job.size,
+          level: job.seniority || undefined,
           job_category: job.job_category
         });
         return { action: 'saved', job };
@@ -94,10 +109,13 @@ export default function Jobs() {
       posthog.capture(result.action === 'saved' ? 'job_saved' : 'job_unsaved', {
         job_title: result.job.title,
         company: result.job.company,
-        category: result.job.category,
+        job_category: result.job.job_category,
         city: result.job.city,
-        level: result.job.level,
+        seniority: result.job.seniority,
       });
+    },
+    onError: () => {
+      toast.error('Could not update saved jobs. Please try again.');
     },
   });
 
@@ -108,17 +126,16 @@ export default function Jobs() {
         await savedJobsApi.update(existing.id, {
           applied: !existing.applied,
           applied_date: !existing.applied ? new Date().toISOString().split('T')[0] : undefined
-        });
+        }, existing.url);
         return { action: existing.applied ? 'unapplied' : 'applied', job };
       } else {
         await savedJobsApi.create({
           job_title: job.title,
           company: job.company,
-          category: job.category,
-          city: job.city,
+          category: job.department || undefined,
+          city: displayCity(job),
           url: job.url,
-          level: job.level,
-          size: job.size,
+          level: job.seniority || undefined,
           job_category: job.job_category,
           applied: true,
           applied_date: new Date().toISOString().split('T')[0]
@@ -133,36 +150,63 @@ export default function Jobs() {
       posthog.capture(result.action === 'applied' ? 'job_applied' : 'job_unapplied', {
         job_title: result.job.title,
         company: result.job.company,
-        category: result.job.category,
+        job_category: result.job.job_category,
         city: result.job.city,
-        level: result.job.level,
+        seniority: result.job.seniority,
       });
+    },
+    onError: () => {
+      toast.error('Could not update the application status. Please try again.');
     },
   });
 
   // Extract unique cities from jobs
+  const { data: cityLabels = {} } = useQuery({
+    queryKey: JOBS_PAYLOAD_QUERY_KEY,
+    queryFn: fetchJobsPayload,
+    staleTime: 1000 * 60 * 5,
+    select: selectCityLabels,
+  });
+
+  // City facet: canonical cities only (never raw location strings like
+  // "2 Locations"), labeled in Hebrew when known.
   const cities = useMemo(() => {
-    const citySet = new Set(jobs.map(job => job.city).filter(Boolean));
-    return Array.from(citySet).sort();
-  }, [jobs]);
+    const citySet = new Set(jobs.flatMap(job => job.cities));
+    return Array.from(citySet).sort((a, b) => (cityLabels[a] || a).localeCompare(cityLabels[b] || b));
+  }, [jobs, cityLabels]);
+
+  // City params validate against the canonical cities actually present in
+  // the payload - not cityLabels, which is an optional translation table
+  // that can lag new cities and would silently drop a valid filter.
+  const validCities = useMemo(() => new Set(jobs.flatMap(job => job.cities)), [jobs]);
+  useEffect(() => {
+    if (!initialCity || validCities.size === 0) return;
+    if (!validCities.has(initialCity)) {
+      setFilters(prev => ({ ...prev, cities: prev.cities.filter(c => c !== initialCity) }));
+    }
+  }, [initialCity, validCities]);
 
   // Filter jobs
   const filteredJobs = useMemo(() => {
     return jobs.filter(job => {
+      // Closed tombstones are hidden unless the user asks for them
+      if (isClosed(job) && !filters.showClosed) return false;
+
       // Search filter
       if (searchQuery) {
         const search = searchQuery.toLowerCase();
         const matchesSearch =
           job.title?.toLowerCase().includes(search) ||
           job.company?.toLowerCase().includes(search) ||
-          job.category?.toLowerCase().includes(search) ||
-          job.city?.toLowerCase().includes(search);
+          job.department?.toLowerCase().includes(search) ||
+          job.city?.toLowerCase().includes(search) ||
+          job.cityHe?.includes(searchQuery) ||
+          job.cities.some(city =>
+            city.toLowerCase().includes(search) ||
+            (cityLabels[city] || '').toLowerCase().includes(search)
+          ) ||
+          job.technologies.some(t => t.toLowerCase().includes(search));
         if (!matchesSearch) return false;
-      }
-
-      // Category filter
-      if (filters.categories.length > 0 && !filters.categories.includes(job.category)) {
-        return false;
       }
 
       // Job category filter
@@ -170,68 +214,45 @@ export default function Jobs() {
         return false;
       }
 
-      // Level filter
-      if (filters.levels.length > 0) {
-        const titleLower = job.title?.toLowerCase() || '';
-        const jobLevel = job.level?.toLowerCase() || '';
-
-        const matchesLevel = filters.levels.some(level => {
-          const levelLower = level.toLowerCase();
-          if (levelLower === 'junior') {
-            return titleLower.includes('junior') || titleLower.includes('jr.') || titleLower.includes('jr ');
-          }
-          if (levelLower === 'mid-level') {
-            return !titleLower.includes('senior') && !titleLower.includes('junior') && !titleLower.includes('lead') && !titleLower.includes('staff') && !titleLower.includes('principal') && !titleLower.includes('director') && !titleLower.includes('head of') && !titleLower.includes('vp');
-          }
-          if (levelLower === 'senior') {
-            return titleLower.includes('senior') || titleLower.includes('sr.') || titleLower.includes('sr ');
-          }
-          if (levelLower === 'staff') {
-            return titleLower.includes('staff') || titleLower.includes('principal');
-          }
-          if (levelLower === 'lead') {
-            return titleLower.includes('lead') && !titleLower.includes('team lead');
-          }
-          if (levelLower === 'team lead') {
-            return titleLower.includes('team lead') || titleLower.includes('tl ') || titleLower.includes('tech lead');
-          }
-          if (levelLower === 'manager') {
-            return jobLevel === 'manager' || titleLower.includes('manager');
-          }
-          if (levelLower === 'director') {
-            return titleLower.includes('director');
-          }
-          if (levelLower === 'executive') {
-            return jobLevel === 'executive' || titleLower.includes('head of') || titleLower.includes('vp') || titleLower.includes('cto') || titleLower.includes('ceo') || titleLower.includes('chief');
-          }
-          if (levelLower === 'intern') {
-            return titleLower.includes('intern') || titleLower.includes('student');
-          }
-          return false;
-        });
-
-        if (!matchesLevel) return false;
-      }
-
-      // Size filter
-      if (filters.sizes.length > 0 && !filters.sizes.includes(job.size)) {
+      // Work model filter
+      if (filters.workModels.length > 0 && (!job.workModel || !filters.workModels.includes(job.workModel))) {
         return false;
       }
 
-      // City filter
-      if (filters.cities.length > 0 && !filters.cities.includes(job.city)) {
+      // Employment type filter
+      if (filters.employmentTypes.length > 0 && (!job.employmentType || !filters.employmentTypes.includes(job.employmentType))) {
+        return false;
+      }
+
+      // Seniority filter
+      if (filters.seniorities.length > 0 && (!job.seniority || !filters.seniorities.includes(job.seniority))) {
+        return false;
+      }
+
+      // Region filter (a job matches ANY of its regions)
+      if (filters.regions.length > 0 &&
+          !job.regions.some(r => filters.regions.includes(r))) {
+        return false;
+      }
+
+      // City filter (a job matches ANY of its canonical cities)
+      if (filters.cities.length > 0 &&
+          !job.cities.some(c => filters.cities.includes(c))) {
         return false;
       }
 
       return true;
     });
-  }, [jobs, filters, searchQuery]);
+  }, [jobs, filters, searchQuery, cityLabels]);
 
   // Pagination
   const totalPages = Math.ceil(filteredJobs.length / JOBS_PER_PAGE);
+  // A background refetch can shrink the result set while the user sits on a
+  // page that no longer exists; clamp instead of rendering an empty list.
+  const activePage = Math.min(currentPage, Math.max(totalPages, 1));
   const paginatedJobs = filteredJobs.slice(
-    (currentPage - 1) * JOBS_PER_PAGE,
-    currentPage * JOBS_PER_PAGE
+    (activePage - 1) * JOBS_PER_PAGE,
+    activePage * JOBS_PER_PAGE
   );
 
   // Reset to page 1 when filters change
@@ -259,11 +280,13 @@ export default function Jobs() {
   }, [currentPage]);
 
   const activeFiltersCount =
-    filters.categories.length +
     filters.jobCategories.length +
-    filters.levels.length +
-    filters.sizes.length +
-    filters.cities.length;
+    filters.workModels.length +
+    filters.employmentTypes.length +
+    filters.seniorities.length +
+    filters.cities.length +
+    filters.regions.length +
+    (filters.showClosed ? 1 : 0);
 
   const isJobSaved = (job: Job) => savedJobs.some(s => s.url === job.url);
   const isJobApplied = (job: Job) => savedJobs.some(s => s.url === job.url && s.applied);
@@ -277,16 +300,16 @@ export default function Jobs() {
       for (let i = 1; i <= totalPages; i++) {
         pages.push(i);
       }
-    } else if (currentPage <= Math.floor(maxPages / 2) + 1) {
+    } else if (activePage <= Math.floor(maxPages / 2) + 1) {
       for (let i = 1; i <= maxPages; i++) {
         pages.push(i);
       }
-    } else if (currentPage >= totalPages - Math.floor(maxPages / 2)) {
+    } else if (activePage >= totalPages - Math.floor(maxPages / 2)) {
       for (let i = totalPages - maxPages + 1; i <= totalPages; i++) {
         pages.push(i);
       }
     } else {
-      const start = currentPage - Math.floor(maxPages / 2);
+      const start = activePage - Math.floor(maxPages / 2);
       for (let i = start; i < start + maxPages; i++) {
         pages.push(i);
       }
@@ -313,7 +336,7 @@ export default function Jobs() {
                 Updated daily from leading startups and enterprises.
               </p>
             </div>
-            <Button asChild className="bg-copper-500 text-white hover:bg-copper-600 border-none shadow-lg w-full md:w-auto">
+            <Button asChild className="bg-copper-700 text-white hover:bg-copper-800 border-none shadow-lg w-full md:w-auto">
               <Link to={createPageUrl("Companies")}>
                 <Building2 className="w-4 h-4 mr-2" />
                 Browse Companies
@@ -330,6 +353,7 @@ export default function Jobs() {
           filters={filters}
           setFilters={setFilters}
           cities={cities}
+        cityLabels={cityLabels}
           isOpen={isFilterOpen}
           onClose={() => setIsFilterOpen(false)}
           isMobile={true}
@@ -339,6 +363,7 @@ export default function Jobs() {
           filters={filters}
           setFilters={setFilters}
           cities={cities}
+        cityLabels={cityLabels}
           isOpen={true}
           onClose={() => {}}
           isMobile={false}
@@ -352,11 +377,33 @@ export default function Jobs() {
             onFilterClick={() => setIsFilterOpen(true)}
             totalJobs={filteredJobs.length}
             activeFiltersCount={activeFiltersCount}
+            isLoading={isLoading}
           />
 
           <div className="flex-1 overflow-y-auto p-4">
+            {/* A failed background refresh must not replace results that
+                are already on screen from the cached payload. */}
+            {isError && jobs.length > 0 && (
+              <div className="mb-4 flex items-center justify-between rounded-lg bg-amber-50 border border-amber-200 px-4 py-2 text-sm text-amber-800" role="status">
+                <span>Could not refresh the feed - showing the last loaded data.</span>
+                <button type="button" onClick={() => refetch()} className="underline hover:text-amber-900">Retry</button>
+              </div>
+            )}
             {isLoading ? (
               <JobsLoader />
+            ) : isError && jobs.length === 0 ? (
+              <div className="text-center py-16" role="alert">
+                <Briefcase className="w-16 h-16 text-warm-300 mx-auto mb-4" />
+                <h3 className="text-lg font-medium text-warm-700 mb-2">Jobs could not be loaded</h3>
+                <p className="text-warm-500 mb-4">The live feed did not respond. Check your connection and try again.</p>
+                <button
+                  type="button"
+                  onClick={() => refetch()}
+                  className="px-4 py-2 rounded-lg bg-iris-600 text-white hover:bg-iris-700 transition-colors"
+                >
+                  Retry
+                </button>
+              </div>
             ) : paginatedJobs.length === 0 ? (
               <div className="text-center py-16">
                 <Briefcase className="w-16 h-16 text-warm-300 mx-auto mb-4" />
@@ -385,8 +432,9 @@ export default function Jobs() {
                     <Button
                       variant="outline"
                       size="sm"
-                      onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
-                      disabled={currentPage === 1}
+                      onClick={() => setCurrentPage(Math.max(1, activePage - 1))}
+                      disabled={activePage === 1}
+                      aria-label="Previous page" 
                       className="px-2 sm:px-3"
                     >
                       <ChevronLeft className="w-4 h-4" />
@@ -396,10 +444,12 @@ export default function Jobs() {
                       {getVisiblePageNumbers().map(pageNum => (
                         <Button
                           key={pageNum}
-                          variant={currentPage === pageNum ? "default" : "outline"}
+                          variant={activePage === pageNum ? "default" : "outline"}
                           size="sm"
                           onClick={() => setCurrentPage(pageNum)}
-                          className={`min-w-[36px] ${currentPage === pageNum ? "bg-iris-600" : ""}`}
+                          aria-label={`Page ${pageNum}`}
+                          aria-current={activePage === pageNum ? "page" : undefined}
+                          className={`min-w-[36px] ${activePage === pageNum ? "bg-iris-600" : ""}`}
                         >
                           {pageNum}
                         </Button>
@@ -409,8 +459,9 @@ export default function Jobs() {
                     <Button
                       variant="outline"
                       size="sm"
-                      onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
-                      disabled={currentPage === totalPages}
+                      onClick={() => setCurrentPage(Math.min(totalPages, activePage + 1))}
+                      disabled={activePage === totalPages}
+                      aria-label="Next page" 
                       className="px-2 sm:px-3"
                     >
                       <ChevronRight className="w-4 h-4" />

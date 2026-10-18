@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Link } from "react-router-dom";
 import { createPageUrl } from "@/utils";
@@ -17,19 +17,24 @@ import {
   Circle,
   MessageSquare,
   Pencil,
+  RefreshCw,
   X
 } from "lucide-react";
 import { toast } from "sonner";
 import { motion, AnimatePresence } from "framer-motion";
 import { Textarea } from "@/components/ui/textarea";
 import { format } from "date-fns";
-import { savedJobsApi, type SavedJob } from "@/api/storage";
+import { reconcileGuestSavedJobs, savedJobsApi, type SavedJob } from "@/api/storage";
+import { useAuth } from "@/hooks/useAuth";
 
 const levelColors: Record<string, string> = {
-  'Engineer': 'bg-blue-50 text-blue-700 border-blue-200',
-  'Manager': 'bg-purple-50 text-purple-700 border-purple-200',
-  'Executive': 'bg-amber-50 text-amber-700 border-amber-200',
-  'Intern': 'bg-green-50 text-green-700 border-green-200',
+  intern: 'bg-green-50 text-green-700 border-green-200',
+  junior: 'bg-blue-50 text-blue-700 border-blue-200',
+  senior: 'bg-purple-50 text-purple-700 border-purple-200',
+  staff: 'bg-indigo-50 text-indigo-700 border-indigo-200',
+  principal: 'bg-indigo-50 text-indigo-700 border-indigo-200',
+  lead: 'bg-amber-50 text-amber-700 border-amber-200',
+  manager: 'bg-amber-50 text-amber-700 border-amber-200',
 };
 
 type FilterType = 'all' | 'applied' | 'not-applied';
@@ -47,6 +52,22 @@ export default function SavedJobs() {
     refetchOnWindowFocus: true,
   });
 
+  // Pending guest records (failed reconciliation uploads) stay visible in
+  // the list; retry the sync whenever this page is opened signed in.
+  const { isAuthenticated } = useAuth();
+  useEffect(() => {
+    if (!isAuthenticated) return;
+    reconcileGuestSavedJobs().finally(() => {
+      queryClient.invalidateQueries({ queryKey: ['savedJobs'] });
+    });
+  }, [isAuthenticated, queryClient]);
+
+  const pendingCount = savedJobs.filter(j => j.pending).length;
+  const retrySync = useMutation({
+    mutationFn: () => reconcileGuestSavedJobs(),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['savedJobs'] }),
+  });
+
   const filteredJobs = savedJobs.filter(job => {
     if (filter === 'applied') return job.applied;
     if (filter === 'not-applied') return !job.applied;
@@ -56,10 +77,17 @@ export default function SavedJobs() {
   const appliedCount = savedJobs.filter(j => j.applied).length;
 
   const deleteMutation = useMutation({
-    mutationFn: (id: string) => savedJobsApi.delete(id),
-    onSuccess: () => {
+    mutationFn: ({ id, url }: { id: string; url?: string }) => savedJobsApi.delete(id, url),
+    onSuccess: (removed) => {
       queryClient.invalidateQueries({ queryKey: ['savedJobs'] });
-      toast.success('Job removed from saved');
+      // delete() resolves false when nothing was actually removed or queued
+      // (e.g. the account could not be resolved to scope a retry) - that is
+      // a failure, not a removal.
+      if (removed) {
+        toast.success('Job removed from saved');
+      } else {
+        toast.error('Failed to remove job');
+      }
     },
     onError: () => {
       toast.error('Failed to remove job');
@@ -67,8 +95,8 @@ export default function SavedJobs() {
   });
 
   const updateMutation = useMutation({
-    mutationFn: ({ id, data }: { id: string; data: Partial<SavedJob> }) =>
-      savedJobsApi.update(id, data),
+    mutationFn: ({ id, data, url }: { id: string; data: Partial<SavedJob>; url?: string }) =>
+      savedJobsApi.update(id, data, url),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['savedJobs'] });
     },
@@ -84,7 +112,8 @@ export default function SavedJobs() {
       data: {
         applied: newApplied,
         applied_date: newApplied ? new Date().toISOString().split('T')[0] : undefined
-      }
+      },
+      url: job.url
     }, {
       onSuccess: () => {
         toast.success(newApplied ? 'Marked as applied!' : 'Unmarked as applied');
@@ -97,13 +126,14 @@ export default function SavedJobs() {
     setCommentText(job.comments || '');
   };
 
-  const saveComment = (jobId: string) => {
+  const saveComment = (job: SavedJob) => {
     const text = commentText;
     setEditingComment(null);
     setCommentText('');
     updateMutation.mutate({
-      id: jobId,
-      data: { comments: text }
+      id: job.id,
+      data: { comments: text },
+      url: job.url
     }, {
       onSuccess: () => {
         toast.success('Comment saved');
@@ -118,8 +148,8 @@ export default function SavedJobs() {
         <div className="max-w-4xl mx-auto px-4 py-6">
           <div className="flex items-center gap-4 mb-4">
             <Button asChild variant="ghost" size="icon">
-              <Link to={createPageUrl("Jobs")}>
-                <ArrowLeft className="w-5 h-5" />
+              <Link to={createPageUrl("Jobs")} aria-label="Back to jobs">
+                <ArrowLeft className="w-5 h-5" aria-hidden="true" />
               </Link>
             </Button>
             <div className="flex items-center gap-3">
@@ -132,6 +162,24 @@ export default function SavedJobs() {
               </div>
             </div>
           </div>
+
+          {pendingCount > 0 && (
+            <div className="mt-4 flex items-center justify-between gap-3 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3" role="status">
+              <p className="text-sm text-amber-800">
+                {pendingCount} saved {pendingCount === 1 ? 'job has' : 'jobs have'} not synced to your account yet.
+              </p>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => retrySync.mutate()}
+                disabled={retrySync.isPending}
+                className="gap-1.5"
+              >
+                <RefreshCw className={`w-4 h-4 ${retrySync.isPending ? 'animate-spin' : ''}`} />
+                Retry sync
+              </Button>
+            </div>
+          )}
 
           {/* Filter Tabs */}
           {savedJobs.length > 0 && (
@@ -224,12 +272,19 @@ export default function SavedJobs() {
                       <div className="flex justify-between items-start gap-4">
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center gap-2 mb-2 flex-wrap">
-                            <Badge
-                              variant="outline"
-                              className={`${levelColors[job.level || ''] || 'bg-warm-50 text-warm-700 border-warm-200'} text-xs`}
-                            >
-                              {job.level}
-                            </Badge>
+                            {job.pending && (
+                              <Badge variant="outline" className="bg-amber-50 text-amber-700 border-amber-200 text-xs">
+                                Not synced yet
+                              </Badge>
+                            )}
+                            {job.level && (
+                              <Badge
+                                variant="outline"
+                                className={`${levelColors[job.level] || 'bg-warm-50 text-warm-700 border-warm-200'} text-xs capitalize`}
+                              >
+                                {job.level}
+                              </Badge>
+                            )}
                             {job.job_category && (
                               <Badge variant="outline" className="bg-iris-50 text-iris-700 border-iris-200 text-xs capitalize">
                                 {job.job_category.replace(/-/g, ' ')}
@@ -269,7 +324,7 @@ export default function SavedJobs() {
                         <Button
                           variant="ghost"
                           size="icon"
-                          onClick={() => deleteMutation.mutate(job.id)}
+                          onClick={() => deleteMutation.mutate({ id: job.id, url: job.url })}
                           disabled={deleteMutation.isPending}
                           className="text-warm-400 hover:text-red-500 hover:bg-red-50 disabled:opacity-50"
                         >
@@ -300,7 +355,7 @@ export default function SavedJobs() {
                             </Button>
                             <Button
                               size="sm"
-                              onClick={() => saveComment(job.id)}
+                              onClick={() => saveComment(job)}
                               disabled={updateMutation.isPending}
                               className="bg-iris-600 hover:bg-iris-700 disabled:opacity-50"
                             >

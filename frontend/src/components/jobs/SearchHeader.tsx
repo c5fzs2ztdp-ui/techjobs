@@ -10,6 +10,7 @@ interface SearchHeaderProps {
   onFilterClick: () => void;
   totalJobs: number;
   activeFiltersCount: number;
+  isLoading?: boolean;
 }
 
 export default function SearchHeader({ 
@@ -17,7 +18,8 @@ export default function SearchHeader({
   setSearchQuery, 
   onFilterClick, 
   totalJobs,
-  activeFiltersCount 
+  activeFiltersCount,
+  isLoading = false
 }: SearchHeaderProps) {
   return (
     <div className="sticky top-0 z-30 bg-white/80 backdrop-blur-lg border-b border-warm-200" role="search">
@@ -62,7 +64,7 @@ export default function SearchHeader({
         </div>
 
         <div className="mt-3 text-sm text-warm-500" role="status" aria-live="polite" aria-atomic="true">
-          {totalJobs.toLocaleString()} jobs found
+          {isLoading ? 'Loading jobs...' : `${totalJobs.toLocaleString()} jobs found`}
         </div>
       </div>
     </div>

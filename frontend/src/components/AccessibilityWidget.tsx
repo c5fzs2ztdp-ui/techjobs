@@ -64,7 +64,18 @@ export default function AccessibilityWidget() {
     if (typeof window !== 'undefined') {
       try {
         const saved = localStorage.getItem('accessibility-settings');
-        return saved ? JSON.parse(saved) : defaultSettings;
+        if (!saved) return defaultSettings;
+        // Valid JSON can still be the wrong shape (null, {}, stale schema) -
+        // validate each field so a corrupted entry cannot crash the widget.
+        const parsed: unknown = JSON.parse(saved);
+        if (!parsed || typeof parsed !== 'object') return defaultSettings;
+        const p = parsed as Partial<AccessibilitySettings>;
+        return {
+          fontSize: typeof p.fontSize === 'number' && p.fontSize >= 80 && p.fontSize <= 150 ? p.fontSize : 100,
+          highContrast: p.highContrast === true,
+          highlightLinks: p.highlightLinks === true,
+          bigCursor: p.bigCursor === true,
+        };
       } catch (e) {
         // If JSON is corrupted, return defaults
         if (import.meta.env.DEV) {

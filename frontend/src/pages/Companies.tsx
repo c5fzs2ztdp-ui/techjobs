@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { fetchAllJobs } from "@/components/jobs/jobsData";
+import { fetchJobsPayload, isClosed, JOBS_PAYLOAD_QUERY_KEY, selectCityLabels, selectSortedJobs } from "@/components/jobs/jobsData";
 import { Link } from "react-router-dom";
 import { createPageUrl } from "@/utils";
 import { Button } from "@/components/ui/button";
@@ -12,10 +12,12 @@ import CompanyCard from "@/components/companies/CompanyCard";
 export default function Companies() {
   const [searchQuery, setSearchQuery] = useState('');
 
-  const { data: jobs = [], isLoading } = useQuery({
-    queryKey: ['jobs'],
-    queryFn: fetchAllJobs,
+  const { data: jobs = [], isLoading, isError, refetch } = useQuery({
+    queryKey: JOBS_PAYLOAD_QUERY_KEY,
+    queryFn: fetchJobsPayload,
     staleTime: 1000 * 60 * 5, // 5 minutes
+    retry: 2,
+    select: (payload) => selectSortedJobs(payload).filter(j => !isClosed(j)),
   });
 
   // Aggregate jobs by company
@@ -24,7 +26,6 @@ export default function Companies() {
       name: string;
       jobs: typeof jobs;
       categories: Set<string>;
-      sizes: Set<string>;
       locations: Set<string>;
       latestUpdate: string;
     }>();
@@ -38,19 +39,21 @@ export default function Companies() {
           name: normalizedName,
           jobs: [],
           categories: new Set(),
-          sizes: new Set(),
           locations: new Set(),
-          latestUpdate: job.updated
+          latestUpdate: job.updated || ''
         });
       }
 
       const company = companyMap.get(normalizedName)!;
       company.jobs.push(job);
-      if (job.category) company.categories.add(job.category);
-      if (job.size) company.sizes.add(job.size);
-      if (job.city) company.locations.add(job.city);
-      if (new Date(job.updated) > new Date(company.latestUpdate)) {
-        company.latestUpdate = job.updated;
+      // Canonical cities only - never raw location strings ("2 Locations").
+      const jobCities = job.cities?.length ? job.cities : (job.city ? [job.city] : []);
+      jobCities.forEach(c => company.locations.add(c));
+      if (job.department) company.categories.add(job.department);
+      const t = job.updated ? new Date(job.updated).getTime() : 0;
+      const cur = company.latestUpdate ? new Date(company.latestUpdate).getTime() : 0;
+      if (t > cur) {
+        company.latestUpdate = job.updated || '';
       }
     });
 
@@ -58,12 +61,18 @@ export default function Companies() {
       .map(c => ({
         ...c,
         categories: Array.from(c.categories),
-        sizes: Array.from(c.sizes),
         locations: Array.from(c.locations),
         jobCount: c.jobs.length
       }))
       .sort((a, b) => b.jobCount - a.jobCount); // Sort by most jobs first
   }, [jobs]);
+
+  const { data: cityLabels = {} } = useQuery({
+    queryKey: JOBS_PAYLOAD_QUERY_KEY,
+    queryFn: fetchJobsPayload,
+    staleTime: 1000 * 60 * 5,
+    select: selectCityLabels,
+  });
 
   const filteredCompanies = useMemo(() => {
     if (!searchQuery) return companies;
@@ -71,9 +80,12 @@ export default function Companies() {
     return companies.filter(c =>
       c.name.toLowerCase().includes(lowerQuery) ||
       c.categories.some(cat => cat.toLowerCase().includes(lowerQuery)) ||
-      c.locations.some(loc => loc.toLowerCase().includes(lowerQuery))
+      c.locations.some(loc =>
+        loc.toLowerCase().includes(lowerQuery) ||
+        (cityLabels[loc] || '').toLowerCase().includes(lowerQuery)
+      )
     );
-  }, [companies, searchQuery]);
+  }, [companies, searchQuery, cityLabels]);
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-warm-50 to-iris-50/30">
@@ -93,7 +105,7 @@ export default function Companies() {
                 Find the perfect workplace for your next career move.
               </p>
             </div>
-            <Button asChild className="bg-copper-500 text-white hover:bg-copper-600 border-none shadow-lg">
+            <Button asChild className="bg-copper-700 text-white hover:bg-copper-800 border-none shadow-lg">
               <Link to={createPageUrl("Jobs")}>
                 <Briefcase className="w-4 h-4 mr-2" />
                 Browse Jobs
@@ -114,11 +126,30 @@ export default function Companies() {
       </div>
 
       <div className="max-w-7xl mx-auto px-4 py-8">
+        {/* A failed background refresh must not replace loaded companies. */}
+        {isError && jobs.length > 0 && (
+          <div className="mb-4 flex items-center justify-between rounded-lg bg-amber-50 border border-amber-200 px-4 py-2 text-sm text-amber-800" role="status">
+            <span>Could not refresh the feed - showing the last loaded data.</span>
+            <button type="button" onClick={() => refetch()} className="underline hover:text-amber-900">Retry</button>
+          </div>
+        )}
         {isLoading ? (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {[...Array(6)].map((_, i) => (
               <div key={i} className="h-48 bg-warm-200 rounded-xl animate-pulse" />
             ))}
+          </div>
+        ) : isError && jobs.length === 0 ? (
+          <div className="text-center py-16" role="alert">
+            <p className="text-lg font-medium text-warm-700 mb-2">Companies could not be loaded</p>
+            <p className="text-warm-500 mb-4">The live feed did not respond. Check your connection and try again.</p>
+            <button
+              type="button"
+              onClick={() => refetch()}
+              className="px-4 py-2 rounded-lg bg-iris-600 text-white hover:bg-iris-700 transition-colors"
+            >
+              Retry
+            </button>
           </div>
         ) : (
           <>
@@ -132,7 +163,7 @@ export default function Companies() {
             </motion.p>
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
               {filteredCompanies.map((company, index) => (
-                <CompanyCard key={company.name} company={company} index={index} />
+                <CompanyCard key={company.name} company={company} index={index} cityLabels={cityLabels} />
               ))}
             </div>
           </>

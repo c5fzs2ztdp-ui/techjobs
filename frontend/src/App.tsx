@@ -1,19 +1,61 @@
-import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
+import { lazy, Suspense, useEffect } from 'react';
+import { BrowserRouter as Router, Routes, Route, useLocation } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import ErrorBoundary from '@/components/ErrorBoundary';
+import AuthErrorToast from '@/components/AuthErrorToast';
 import { Toaster } from 'sonner';
 
 import Layout from '@/components/Layout';
-import ProtectedRoute from '@/components/ProtectedRoute';
 import AccessibilityWidget from '@/components/AccessibilityWidget';
 import Home from '@/pages/Home';
 import Jobs from '@/pages/Jobs';
-import Companies from '@/pages/Companies';
-import CompanyProfile from '@/pages/CompanyProfile';
-import SavedJobs from '@/pages/SavedJobs';
-import Map from '@/pages/Map';
-import PrivacyPolicy from '@/pages/PrivacyPolicy';
-import TermsOfService from '@/pages/TermsOfService';
-import AccessibilityStatement from '@/pages/AccessibilityStatement';
+
+// Route-level code splitting: every page except the two landing routes
+// (Home, Jobs) loads on demand, so first paint no longer downloads Leaflet
+// and the other secondary-route code.
+const Companies = lazy(() => import('@/pages/Companies'));
+const CompanyProfile = lazy(() => import('@/pages/CompanyProfile'));
+const SavedJobs = lazy(() => import('@/pages/SavedJobs'));
+const Map = lazy(() => import('@/pages/Map'));
+const PrivacyPolicy = lazy(() => import('@/pages/PrivacyPolicy'));
+const TermsOfService = lazy(() => import('@/pages/TermsOfService'));
+const AccessibilityStatement = lazy(() => import('@/pages/AccessibilityStatement'));
+const NotFound = lazy(() => import('@/pages/NotFound'));
+
+// Per-route document titles (SEO + screen readers announce page changes).
+const PAGE_TITLES: [RegExp, string][] = [
+  [/^\/$/, 'TechJobsIL - Israeli Tech Jobs'],
+  [/^\/jobs/, 'Jobs - TechJobsIL'],
+  [/^\/companies/, 'Companies - TechJobsIL'],
+  [/^\/company/, 'Company Profile - TechJobsIL'],
+  [/^\/saved/, 'Saved Jobs - TechJobsIL'],
+  [/^\/map/, 'Jobs Map - TechJobsIL'],
+  [/^\/privacy/, 'Privacy Policy - TechJobsIL'],
+  [/^\/terms/, 'Terms of Service - TechJobsIL'],
+  [/^\/accessibility/, 'Accessibility Statement - TechJobsIL'],
+];
+
+function PageTitle() {
+  const { pathname, search } = useLocation();
+  useEffect(() => {
+    const match = PAGE_TITLES.find(([re]) => re.test(pathname));
+    document.title = match ? match[1] : 'Page Not Found - TechJobsIL';
+    // index.html declares the homepage canonical, but the SPA serves
+    // distinct pages at /jobs, /companies, /company, etc. Point the
+    // canonical at the current route (keeping the company identifier) so
+    // search engines don't collapse every page into "/".
+    const canonical = document.querySelector<HTMLLinkElement>('link[rel="canonical"]');
+    if (canonical) {
+      const company = pathname.startsWith('/company')
+        ? new URLSearchParams(search).get('name')
+        : null;
+      canonical.href =
+        'https://techjobsil.com' + (pathname === '/' ? '/' : pathname) +
+        (company ? `?name=${encodeURIComponent(company)}` : '');
+    }
+  }, [pathname, search]);
+  return null;
+}
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -28,6 +70,10 @@ function App() {
   return (
     <QueryClientProvider client={queryClient}>
       <Router>
+        <PageTitle />
+        <AuthErrorToast />
+        <ErrorBoundary>
+        <Suspense fallback={<div className="min-h-[60vh] flex items-center justify-center text-warm-500">Loading...</div>}>
         <Routes>
           <Route
             path="/"
@@ -41,9 +87,7 @@ function App() {
             path="/jobs"
             element={
               <Layout currentPageName="Jobs">
-                <ProtectedRoute>
-                  <Jobs />
-                </ProtectedRoute>
+                <Jobs />
               </Layout>
             }
           />
@@ -103,7 +147,17 @@ function App() {
               </Layout>
             }
           />
+          <Route
+            path="*"
+            element={
+              <Layout currentPageName="NotFound">
+                <NotFound />
+              </Layout>
+            }
+          />
         </Routes>
+        </Suspense>
+        </ErrorBoundary>
         <AccessibilityWidget />
       </Router>
       <Toaster position="top-right" richColors />

@@ -55,7 +55,6 @@ export const handlers = [
       user: mockUser,
     });
   }),
-
   http.post('/auth/logout', () => {
     return HttpResponse.json({ success: true });
   }),

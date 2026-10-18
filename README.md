@@ -1,6 +1,22 @@
 # TechJobs - Israeli Tech Job Board
 
-A full-stack application for browsing Israeli tech jobs, built with React, Express.js, and SQLite.
+A full-stack application for browsing Israeli tech jobs, built with React, Express.js, and Supabase.
+
+**Job data** comes from a configurable JSON feed (see `VITE_JOBS_DATA_URL` below). `scripts/convert_jobs.mjs` converts a jobs JSON file into the site payload, so data updates never require a site redeploy.
+
+**No login required to browse.** Guests can search and filter all jobs; signing in with Google is only needed to sync saved jobs and applied tracking across devices (guest saves stay in browser localStorage).
+
+## ⚙️ Data source configuration
+
+The frontend reads the jobs payload from a plain JSON URL (no API needed):
+
+| Env var (build time) | Default | Purpose |
+| --- | --- | --- |
+| `VITE_JOBS_DATA_URL` | (required - no default) | Jobs payload feed. Point at the published payload maintained alongside your deployment; the build fails loudly when it is missing. |
+| `VITE_SUBMIT_COMPANY_URL` | `https://github.com/natifridman/techjobs` | Where the "Add Company" dialog sends contributors. |
+
+The payload format is produced by `scripts/convert_jobs.mjs` (see its
+regression tests in `scripts/convert_jobs.test.mjs`).
 
 ## 🏗️ Architecture
 
@@ -18,7 +34,7 @@ techjobs/
 │   ├── src/
 │   │   ├── routes/      # API routes (auth, savedJobs, companies)
 │   │   ├── config/      # Passport OAuth configuration
-│   │   └── database.ts  # SQLite database
+│   │   └── database.ts  # Supabase (Postgres) client
 │   └── Dockerfile
 ├── Makefile             # Build & run commands
 └── podman-compose.yml   # Container orchestration
@@ -38,8 +54,8 @@ This app uses **Google OAuth** for authentication. Users can:
 3. Navigate to **APIs & Services** → **Credentials**
 4. Click **Create Credentials** → **OAuth client ID**
 5. Select **Web application**
-6. Add authorized redirect URIs:
-   - For production: `http://localhost:8080/auth/google/callback`
+6. Add authorized redirect URIs (the callback hits the backend, not the frontend):
+   - For production: `https://<your-backend-domain>/auth/google/callback`
    - For development: `http://localhost:3001/auth/google/callback`
 7. Copy the **Client ID** and **Client Secret**
 
@@ -51,6 +67,13 @@ Create a `.env` file in the project root:
 # Required for OAuth
 GOOGLE_CLIENT_ID=your-client-id.apps.googleusercontent.com
 GOOGLE_CLIENT_SECRET=your-client-secret
+
+# Required for the database (Supabase Postgres). The backend refuses to
+# start without these. Run backend/supabase-schema.sql in your Supabase
+# SQL editor first.
+DATABASE_URL=your-supabase-pooled-connection-string
+SUPABASE_URL=https://your-project.supabase.co
+SUPABASE_SERVICE_KEY=your-service-role-key
 
 # Optional - auto-generated if not set
 SESSION_SECRET=your-session-secret-at-least-32-chars

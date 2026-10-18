@@ -1,0 +1,312 @@
+import { test } from 'node:test';
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import { deriveJobCategory, deriveRegions, isForeignOnlyListing, normalizeCity } from './convert_jobs.mjs';
+
+// Regression: Strauss screenshot cases - Hebrew titles must never default to software.
+test('strauss HR recruiting manager -> hr', () => {
+  assert.equal(deriveJobCategory('מנהלת צוות גיוס אזור הצפון - החלפה לחל"ד', 'משאבי אנוש'), 'hr');
+});
+test('strauss quality systems technician -> mechanical-manufacturing', () => {
+  assert.equal(deriveJobCategory('מטמיע.ת מערכות איכות ישראל החלפה לחל"ד - כל הארץ', 'הנדסה'), 'mechanical-manufacturing');
+});
+test('strauss warehouse inventory -> operations-logistics', () => {
+  assert.equal(deriveJobCategory('אמין.ת מלאי - אתר שוהם', 'לוגיסטיקה (אחסנה, הפצה, הובלה)'), 'operations-logistics');
+});
+test('strauss accounting assistant -> finance', () => {
+  assert.equal(deriveJobCategory('עוזר.ת חשבת במחלקה המקצועית ודיווח כספי - פתח תקווה', 'כספים'), 'finance');
+});
+
+// Never default to software: unmatched -> other.
+test('unmatched title -> other, never software', () => {
+  assert.equal(deriveJobCategory('רכז/ת רישיונות', null), 'admin');
+  assert.equal(deriveJobCategory('Order Management Specialist', null), 'operations-logistics');
+  assert.equal(deriveJobCategory('מחסנא/ית', null), 'operations-logistics');
+  assert.equal(deriveJobCategory('סוקר/ת מפעלי', null), 'other');
+  assert.equal(deriveJobCategory('', null), 'other');
+  assert.equal(deriveJobCategory(null, null), 'other');
+});
+
+// Substring safety: רכז must not match inside מרכז.
+test('מרכז does not trigger admin via רכז', () => {
+  assert.equal(deriveJobCategory('מנהל.ת מרכז תובנות ומחקר', 'שיווק יח"צ וייצוא'), 'marketing');
+});
+
+// Generic management title is refined by department.
+test('management refined by department', () => {
+  assert.equal(deriveJobCategory('מנהל.ת תוכן - פתח תקווה', 'שיווק יח"צ וייצוא'), 'marketing');
+  assert.equal(deriveJobCategory('מנהל.ת בקרה תקציבית', 'כלכלה ובקרה'), 'finance');
+  assert.equal(deriveJobCategory('Project Manager', null), 'management');
+});
+
+// Core EN + HE categories.
+test('core classifications', () => {
+  assert.equal(deriveJobCategory('Senior Backend Engineer', null), 'software');
+  assert.equal(deriveJobCategory('מהנדס/ת תוכנה RT', null), 'software');
+  assert.equal(deriveJobCategory('C++ SW Engineer', null), 'software');
+  // \b never fires after '#' (non-word char), so 'c#\b' silently never
+  // matched - real live titles ('C# Developer', no department) fell to 'other'.
+  assert.equal(deriveJobCategory('C# Developer', null), 'software');
+  assert.equal(deriveJobCategory('Senior C# Engineer', null), 'software');
+  assert.equal(deriveJobCategory('Data Engineer', null), 'data-ai');
+  assert.equal(deriveJobCategory('חוקר/ת AI בכיר/ה', null), 'data-ai');
+  assert.equal(deriveJobCategory('QA Automation Engineer', null), 'qa');
+  assert.equal(deriveJobCategory('DevOps Engineer', null), 'devops');
+  assert.equal(deriveJobCategory('Security Researcher', null), 'security');
+  assert.equal(deriveJobCategory('Security Officer', null), 'other'); // physical guard, not tech
+  assert.equal(deriveJobCategory('Product Manager', null), 'product');
+  assert.equal(deriveJobCategory('UX Designer', null), 'design');
+  assert.equal(deriveJobCategory('Account Executive', null), 'sales');
+  assert.equal(deriveJobCategory('מנהל.ת לקוחות יבש', 'מכירות'), 'sales');
+  assert.equal(deriveJobCategory('Customer Success Manager', null), 'customer-support');
+  assert.equal(deriveJobCategory('נציג/ת שירות לקוחות', null), 'customer-support');
+  assert.equal(deriveJobCategory('Financial Controller', null), 'finance');
+  assert.equal(deriveJobCategory('רואה חשבון', null), 'finance');
+  assert.equal(deriveJobCategory('Supply Chain Manager', null), 'operations-logistics');
+  assert.equal(deriveJobCategory('נהג.ת תובלה', null), 'operations-logistics');
+  assert.equal(deriveJobCategory('FPGA Engineer', null), 'hardware-electronics');
+  assert.equal(deriveJobCategory('טכנאי/ת אוטומציה וחשמל', 'אחזקה'), 'mechanical-manufacturing');
+  assert.equal(deriveJobCategory('Mechanical Engineer', null), 'mechanical-manufacturing');
+  assert.equal(deriveJobCategory('מזכיר.ת מנכל"ית', null), 'admin');
+  assert.equal(deriveJobCategory('VP Engineering', null), 'management');
+});
+
+// Infrastructure technician (facilities/energy) is not DevOps.
+test('HE תשתיות without computing context is not devops', () => {
+  assert.equal(deriveJobCategory('טכנאי.ת תשתיות ואנרגיה', 'אחזקה'), 'mechanical-manufacturing');
+  assert.equal(deriveJobCategory('מהנדס תשתיות מחשוב', null), 'devops');
+});
+
+// User feedback: טכנולוג (technologist) is not software.
+test('technologist titles are not software', () => {
+  assert.equal(deriveJobCategory('טכנולוג.ית פרוייקטים', 'מו"פ וטכנולוגיה'), 'mechanical-manufacturing');
+  assert.equal(deriveJobCategory('טכנולוג.ית מחקר ופיתוח - יטבתה', 'מו"פ וטכנולוגיה'), 'mechanical-manufacturing');
+  assert.equal(deriveJobCategory('מהנדס.ת פיתוח טכנולוגי', 'מו"פ וטכנולוגיה'), 'other');
+  assert.equal(deriveJobCategory('Technologist', null), 'mechanical-manufacturing');
+  // IT-context טכנולוגיות must not hit the technologist rule
+  assert.notEqual(deriveJobCategory('מהנדס טכנולוגיות מידע', null), 'mechanical-manufacturing');
+  // real software development in Hebrew still classifies
+  assert.equal(deriveJobCategory('מהנדס פיתוח תוכנה', null), 'software');
+});
+
+// Regression: "Tel Aviv / Remote" must keep its city; only standalone "remote" is non-city.
+test('remote-mentioned location keeps real city', async () => {
+  const { normalizeCity } = await import('./convert_jobs.mjs');
+  assert.equal(normalizeCity('Tel Aviv / Remote').city, 'Tel Aviv');
+  assert.equal(normalizeCity('Remote or Haifa').city, 'Haifa');
+  assert.equal(normalizeCity('Remote').city, null);
+});
+
+// Regions derive from every canonical city - a multi-city job appears under
+// every matching region filter (Nati round-2 finding).
+test('regions derive from all canonical cities', () => {
+  assert.deepEqual(
+    deriveRegions(['Tel Aviv', 'Haifa'], ['tel-aviv-gush-dan'], 'tel-aviv-gush-dan'),
+    ['tel-aviv-gush-dan', 'haifa-krayot'],
+  );
+});
+
+// Rows without upstream annotations still get a region from a known city.
+test('city-only row still lands in a region filter', () => {
+  assert.deepEqual(deriveRegions(['Herzliya'], null, null), ['sharon']);
+});
+
+// Unsupported annotations are dropped, not passed through.
+test('unsupported region annotations are dropped', () => {
+  assert.deepEqual(deriveRegions(['Haifa'], ['narnia'], 'middle-earth'), ['haifa-krayot']);
+  assert.deepEqual(deriveRegions([], ['narnia'], null), []);
+});
+
+// closedAt passes through so the site can mark/hide closed tombstones.
+test('closedAt passes through the converter', async () => {
+  const { execFileSync } = await import('node:child_process');
+  const fs = await import('node:fs');
+  const os = await import('node:os');
+  const path = await import('node:path');
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'convert-closed-'));
+  try {
+    const input = path.join(tmp, 'in.json');
+    const output = path.join(tmp, 'out.json');
+    fs.writeFileSync(input, JSON.stringify([
+      { company: 'A', title: 'Engineer', url: 'https://x/1', city: 'Tel Aviv', refreshState: 'closed', closedAt: '2026-10-17T00:00:00Z' },
+      { company: 'A', title: 'Designer', url: 'https://x/2', city: 'Haifa', refreshState: 'fresh' },
+    ]));
+    execFileSync(process.execPath, ['scripts/convert_jobs.mjs', input, output]);
+    const payload = JSON.parse(fs.readFileSync(output, 'utf8'));
+    assert.equal(payload.jobs[0].closedAt, '2026-10-17T00:00:00Z');
+    assert.equal(payload.jobs[0].refreshState, 'closed');
+    assert.equal(payload.jobs[1].closedAt, null);
+  } finally {
+    fs.rmSync(tmp, { recursive: true, force: true });
+  }
+});
+
+// The general account-manager sales rule must not shadow the specific
+// Technical Account Manager support rule (Nati round-3 finding).
+test('Technical Account Manager -> customer-support, not sales', () => {
+  assert.equal(deriveJobCategory('Technical Account Manager', null), 'customer-support');
+  assert.equal(deriveJobCategory('Team Lead, Technical Account Manager', null), 'customer-support');
+  assert.equal(deriveJobCategory('Account Manager', null), 'sales'); // general rule still works
+});
+
+// Generic automation-engineer must not swallow manufacturing/hardware
+// automation titles (Nati round-4 finding); explicit QA/SDET still match.
+test('automation contexts: manufacturing/hardware vs QA', () => {
+  assert.equal(deriveJobCategory('Manufacturing Automation Engineer', null), 'mechanical-manufacturing');
+  assert.equal(deriveJobCategory('Senior VLSI CAD and AI Automation Engineer', null), 'hardware-electronics');
+  assert.equal(deriveJobCategory('QA Automation Engineer', null), 'qa');
+  assert.equal(deriveJobCategory('Test Automation Engineer', null), 'qa');
+  assert.equal(deriveJobCategory('Automation Engineer', null), 'other'); // ambiguous - never forced into QA
+});
+
+// Live-data gaps found in deep-review pass 2 (titles that fell to 'other').
+test('functional rule gaps from live feed audit', () => {
+  assert.equal(deriveJobCategory('SOC Analyst (L2/L3) and Security Advisor', null), 'security');
+  assert.equal(deriveJobCategory('Security Research Intern', null), 'security');
+  assert.equal(deriveJobCategory('UVM SystemVerilog Verification Engineer', null), 'hardware-electronics');
+  assert.equal(deriveJobCategory('Senior DFT Design Engineer', null), 'hardware-electronics');
+  assert.equal(deriveJobCategory('מתכנן.ת מערכות MEMS', null), 'hardware-electronics');
+  assert.equal(deriveJobCategory('ראש/ת מחלקת הנדסת מערכת אוויוניקה לחימושים', null), 'management');
+  assert.equal(deriveJobCategory('כלכלן/ית פרויקטים', null), 'finance');
+  assert.equal(deriveJobCategory('Planning and Control Economist', null), 'finance');
+  assert.equal(deriveJobCategory('Senior Product Analyst', null), 'product');
+  // SoC (silicon) must not be caught by the SOC (security operations) rule
+  assert.equal(deriveJobCategory('Senior SoC Verification Engineer', null), 'hardware-electronics');
+});
+
+test('every region-mapped city round-trips through normalizeCity with a Hebrew label', () => {
+  // Guards the CITIES port against drifting from the region registry:
+  // a region-mapped city the matcher does not know emits city: null in the feed.
+  const src = fs.readFileSync(new URL('./convert_jobs.mjs', import.meta.url), 'utf8');
+  const regionBlock = src.match(/const CITY_REGION = \{([\s\S]*?)\n\};/)[1];
+  const keys = [...regionBlock.matchAll(/'([^']+)': '[a-z-]+'/g)].map(m => m[1]);
+  assert.ok(keys.length > 40, 'expected the full region registry');
+  for (const key of keys) {
+    const { city, cityHe } = normalizeCity(key);
+    assert.equal(city, key, `${key} must round-trip to its canonical name`);
+    assert.ok(cityHe, `${key} must have a Hebrew label`);
+  }
+});
+
+// Leadership titles without a functional keyword classify as management
+// rather than falling through to other (deep-review finding).
+test('leadership titles -> management, not other', () => {
+  assert.equal(deriveJobCategory('Engineering Director', null), 'management');
+  assert.equal(deriveJobCategory('Global Art Director', null), 'management');
+  assert.equal(deriveJobCategory('Team Lead - Browser Security (JavaScript)', null), 'management');
+  assert.equal(deriveJobCategory('R&D Team Lead', null), 'management');
+  assert.equal(deriveJobCategory('Chief Architect', null), 'management');
+  assert.equal(deriveJobCategory('ראש צוות פיתוח', null), 'management');
+});
+
+// Substring city matching must not fire inside longer words (deep-review pass 4).
+test('city matching uses word boundaries for ASCII names and aliases', () => {
+  assert.equal(normalizeCity('Lodging Manager').city, null);
+  assert.equal(normalizeCity('holonistic').city, null);
+  assert.equal(normalizeCity('Acreage Holdings').city, null);
+  assert.equal(normalizeCity('Yavneel').city, null);
+  assert.equal(normalizeCity('Lod').city, 'Lod');
+  assert.equal(normalizeCity('Yokneam, Haifa District, Israel').city, 'Yokneam'); // longest name wins over the district
+  assert.equal(normalizeCity('Ramat-Gan (Tel-Aviv area), IL').city, 'Ramat Gan');
+  assert.equal(normalizeCity('ירושלים').city, 'Jerusalem'); // Hebrew stays substring
+});
+
+// Districts are fallback-only: a concrete city beats a district label, but a
+// bare district location still maps (CodeRabbit pyDt).
+test('district labels lose to concrete cities', () => {
+  assert.equal(normalizeCity('Eilat, Southern District, Israel').city, 'Eilat');
+  assert.equal(normalizeCity('Beit HaEmek (Northern District), IL, IL').city, 'Beit HaEmek');
+  assert.equal(normalizeCity('ISR - Central District of Israel - Hod Hasharon').city, 'Hod HaSharon');
+  assert.equal(normalizeCity('דרום, Israel').city, 'Southern District');
+});
+
+// Explicit occupations outrank broad technology qualifiers (CodeRabbit pyDx).
+test('occupation rules outrank technology qualifiers', () => {
+  assert.equal(deriveJobCategory('AI Sales Specialist III, Google Cloud', null), 'sales');
+  assert.equal(deriveJobCategory('Senior Product Designer - Harmony AI', null), 'design');
+  assert.equal(deriveJobCategory('Enterprise Account Executive (Cyber)', null), 'sales');
+  assert.equal(deriveJobCategory('Growth Marketing Lead (AI-Native)', null), 'marketing');
+});
+
+// Engineering "designers" are hardware/mechanical roles, not design.
+test('engineering designers fall through to hardware/mechanical', () => {
+  assert.equal(deriveJobCategory('PCB Layout Designer', null), 'hardware-electronics');
+  assert.equal(deriveJobCategory('Logic Designer and FPGA Tech Lead', null), 'hardware-electronics');
+  assert.equal(deriveJobCategory('RFIC Designer', null), 'hardware-electronics');
+  assert.equal(deriveJobCategory('Senior Physical Design Engineer', null), 'hardware-electronics');
+  assert.equal(deriveJobCategory('Mechanical Designer', null), 'mechanical-manufacturing');
+  assert.equal(deriveJobCategory('Senior Product Designer', null), 'design');
+  assert.equal(deriveJobCategory('Senior Game Designer', null), 'design');
+});
+
+// Explicit hardware/mechanical test roles stay out of software QA.
+test('mechanical test engineer -> mechanical-manufacturing', () => {
+  assert.equal(deriveJobCategory('Mechanical Test Engineer', null), 'mechanical-manufacturing');
+});
+test('IC post-silicon test engineer -> hardware-electronics', () => {
+  assert.equal(deriveJobCategory('IC Post-Silicon Test Engineer', null), 'hardware-electronics');
+});
+test('electrical sustaining & test engineering -> hardware-electronics', () => {
+  assert.equal(deriveJobCategory('Electrical Engineer - Sustaining and Test Engineering', null), 'hardware-electronics');
+});
+test('software test engineer stays qa', () => {
+  assert.equal(deriveJobCategory('Software Test Engineer', null), 'qa');
+  assert.equal(deriveJobCategory('Test Engineer', null), 'qa');
+});
+
+// Explicitly foreign-only listings are excluded; Israel-inclusive ones kept.
+test('foreign-only listing detection', () => {
+  assert.equal(isForeignOnlyListing({ location: 'Electrical Technician (Illinois) - Mount Vernon, IL, United States' }), true);
+  assert.equal(isForeignOnlyListing({ location: 'New York, NY, United States' }), true);
+  assert.equal(isForeignOnlyListing({ location: 'London, United Kingdom' }), true);
+  assert.equal(isForeignOnlyListing({ location: 'USA / IL' }), false);
+  assert.equal(isForeignOnlyListing({ location: 'Tel Aviv, Israel / New York, United States' }), false);
+  assert.equal(isForeignOnlyListing({ location: 'West Palm Beach OR New York OR Ramat Gan OR Singapore' }), false);
+  assert.equal(isForeignOnlyListing({ location: 'Petah Tikva, IL' }), false);
+  assert.equal(isForeignOnlyListing({ location: 'Tel Aviv' }), false);
+  assert.equal(isForeignOnlyListing({ location: null }), false);
+});
+
+// A district suffix must not override a concrete city in the same string.
+test('district suffix does not override a concrete city', () => {
+  assert.equal(normalizeCity('Herzliya, Tel Aviv District, Israel').city, 'Herzliya');
+  assert.equal(normalizeCity('Acre, Haifa District, Israel').city, 'Acre');
+  assert.equal(normalizeCity('הרצליה, מחוז תל אביב').city, 'Herzliya');
+  assert.equal(normalizeCity('Tel Aviv District, Israel').city, null);
+});
+
+// Explicit hardware occupations stay out of qa/other.
+test('hardware occupation titles', () => {
+  assert.equal(deriveJobCategory('IC Digital Test Engineer', null), 'hardware-electronics');
+  assert.equal(deriveJobCategory('Logic Design Engineer', null), 'hardware-electronics');
+  assert.equal(deriveJobCategory('מהנדס/ת חשמל למערכות הספק', null), 'hardware-electronics');
+});
+
+// Structured canonical locations beat a raw foreign location string.
+test('structured Israeli cities beat a raw foreign location', () => {
+  assert.equal(isForeignOnlyListing({ location: 'New York, United States', cities: ['Tel Aviv'] }), false);
+  assert.equal(isForeignOnlyListing({ city: 'Tel Aviv', location: 'New York, United States' }), false);
+  assert.equal(isForeignOnlyListing({ location: 'New York, United States', cities: [] }), true);
+});
+
+// Review finding: upstream cities entries must normalize like the primary
+// city - an alias (Tel Aviv-Yafo) canonicalizes onto Tel Aviv instead of
+// coexisting with it and inflating facets.
+test('cities array entries are normalized, deduped, and junk discarded', async () => {
+  const { execFileSync } = await import('node:child_process');
+  const os = await import('node:os');
+  const path = await import('node:path');
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'convert-cities-'));
+  try {
+    const input = path.join(tmp, 'in.json');
+    const output = path.join(tmp, 'out.json');
+    fs.writeFileSync(input, JSON.stringify([
+      { company: 'A', title: 'Engineer', url: 'https://x/1', city: 'Tel Aviv', cities: ['Tel Aviv-Yafo', 'Tel Aviv', 'Haifa', 'not-a-city'] },
+    ]));
+    execFileSync(process.execPath, ['scripts/convert_jobs.mjs', input, output]);
+    const payload = JSON.parse(fs.readFileSync(output, 'utf8'));
+    assert.deepEqual(payload.jobs[0].cities, ['Tel Aviv', 'Haifa']);
+  } finally {
+    fs.rmSync(tmp, { recursive: true, force: true });
+  }
+});

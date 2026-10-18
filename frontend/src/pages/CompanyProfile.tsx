@@ -1,32 +1,38 @@
 import { useMemo, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { fetchAllJobs, type Job } from "@/components/jobs/jobsData";
+import { displayCity, fetchJobsPayload, isClosed, JOBS_PAYLOAD_QUERY_KEY, selectSortedJobs, type Job } from "@/components/jobs/jobsData";
 import { Link } from "react-router-dom";
 import { createPageUrl } from "@/utils";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import {
-  ArrowLeft, MapPin, Users, Globe,
-  Search, Briefcase, Lock, LogIn
+  ArrowLeft, MapPin, Globe,
+  Search, Briefcase
 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import JobCard from "@/components/jobs/JobCard";
 import CompanyLogo from "@/components/CompanyLogo";
 import { savedJobsApi } from "@/api/storage";
 import { toast } from "sonner";
-import { useAuth } from "@/hooks/useAuth";
 
 export default function CompanyProfile() {
-  const { isAuthenticated, login } = useAuth();
   const [searchQuery, setSearchQuery] = useState('');
   const queryParams = new URLSearchParams(window.location.search);
   const companyName = queryParams.get('name');
   const queryClient = useQueryClient();
 
   const { data: jobs = [], isLoading: isJobsLoading } = useQuery({
-    queryKey: ['jobs'],
-    queryFn: fetchAllJobs,
+    queryKey: JOBS_PAYLOAD_QUERY_KEY,
+    queryFn: fetchJobsPayload,
     staleTime: 1000 * 60 * 5, // 5 minutes
+    select: (payload) => selectSortedJobs(payload).filter(j => !isClosed(j)),
+  });
+
+  const { data: cityLabels = {} } = useQuery({
+    queryKey: JOBS_PAYLOAD_QUERY_KEY,
+    queryFn: fetchJobsPayload,
+    staleTime: 1000 * 60 * 5, // 5 minutes
+    select: (payload) => payload.cityLabels ?? {},
   });
 
   const { data: savedJobs = [] } = useQuery({
@@ -38,17 +44,16 @@ export default function CompanyProfile() {
     mutationFn: async (job: Job) => {
       const existing = savedJobs.find(s => s.url === job.url);
       if (existing) {
-        await savedJobsApi.delete(existing.id);
+        await savedJobsApi.delete(existing.id, existing.url);
         return { action: 'removed' };
       } else {
         await savedJobsApi.create({
           job_title: job.title,
           company: job.company,
-          category: job.category,
-          city: job.city,
+          category: job.department || undefined,
+          city: displayCity(job),
           url: job.url,
-          level: job.level,
-          size: job.size,
+          level: job.seniority || undefined,
           job_category: job.job_category
         });
         return { action: 'saved' };
@@ -67,17 +72,28 @@ export default function CompanyProfile() {
     if (companyJobs.length === 0) return null;
 
     // Aggregate data
-    const categories = Array.from(new Set(companyJobs.map(j => j.category).filter(Boolean)));
-    const locations = Array.from(new Set(companyJobs.map(j => j.city).filter(Boolean)));
-    const sizes = Array.from(new Set(companyJobs.map(j => j.size).filter(Boolean)));
+    const categories = Array.from(new Set(companyJobs.map(j => j.department).filter(Boolean))) as string[];
+    // Cards may list several canonical cities; surface them all (with
+    // their Hebrew labels), not just the primary one.
+    const locations = Array.from(new Set(companyJobs.flatMap(j =>
+      j.cities.length > 0 ? j.cities.map(c => cityLabels[c] || c) : [displayCity(j)]
+    ).filter(Boolean)));
     const jobCategories = Array.from(new Set(companyJobs.map(j => j.job_category).filter(Boolean)));
 
+    // Mirror the Jobs page: search every canonical city and its Hebrew
+    // label, not just the primary English city.
+    const search = searchQuery.toLowerCase();
     const filteredJobs = companyJobs.filter(job =>
       !searchQuery ||
-      job.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      job.city?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      job.job_category?.toLowerCase().includes(searchQuery.toLowerCase())
-    ).sort((a, b) => new Date(b.updated).getTime() - new Date(a.updated).getTime());
+      job.title.toLowerCase().includes(search) ||
+      job.city?.toLowerCase().includes(search) ||
+      job.cityHe?.includes(searchQuery) ||
+      job.cities.some(city =>
+        city.toLowerCase().includes(search) ||
+        (cityLabels[city] || '').toLowerCase().includes(search)
+      ) ||
+      job.job_category?.toLowerCase().includes(search)
+    );
 
     return {
       name: companyName,
@@ -85,21 +101,12 @@ export default function CompanyProfile() {
       totalJobs: companyJobs.length,
       categories,
       locations,
-      sizes,
       jobCategories,
       latestUpdate: companyJobs[0]?.updated
     };
-  }, [jobs, companyName, searchQuery]);
+  }, [jobs, companyName, searchQuery, cityLabels]);
 
   const isJobSaved = (job: Job) => savedJobs.some(s => s.url === job.url);
-
-  const sizeLabels: Record<string, string> = {
-    'xs': '1-10',
-    's': '11-50',
-    'm': '51-200',
-    'l': '201-1,000',
-    'xl': '1,001+'
-  };
 
   if (!companyName) {
     return (
@@ -143,11 +150,13 @@ export default function CompanyProfile() {
                     <div className="space-y-2">
                       <div>
                         <h1 className="text-3xl font-bold text-warm-900">{companyData.name}</h1>
-                        <div className="flex items-center gap-2 text-warm-500 mt-1">
-                          <Badge variant="secondary" className="font-normal">
-                            {companyData.categories.join(', ')}
-                          </Badge>
-                        </div>
+                        {companyData.categories.length > 0 && (
+                          <div className="flex items-center gap-2 text-warm-500 mt-1">
+                            <Badge variant="secondary" className="font-normal">
+                              {companyData.categories.join(', ')}
+                            </Badge>
+                          </div>
+                        )}
                       </div>
                     </div>
                   </div>
@@ -155,9 +164,9 @@ export default function CompanyProfile() {
 
                 <div className="flex flex-col gap-3 min-w-[200px]">
                   <div className="flex items-center gap-2 text-warm-600">
-                    <Users className="w-4 h-4 text-warm-400" />
+                    <MapPin className="w-4 h-4 text-warm-400" />
                     <span>
-                      {companyData.sizes.map(s => sizeLabels[s] || s).join(', ') || 'Size not specified'}
+                      {companyData.locations.join(', ') || 'Location not specified'}
                     </span>
                   </div>
                   <Button asChild variant="outline" size="sm" className="gap-2 justify-start">
@@ -222,7 +231,7 @@ export default function CompanyProfile() {
                 </span>
               </h2>
 
-              {isAuthenticated && (
+              {
                 <div className="relative w-full sm:w-72">
                   <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-warm-400" />
                   <Input
@@ -232,10 +241,10 @@ export default function CompanyProfile() {
                     className="pl-9"
                   />
                 </div>
-              )}
+              }
             </div>
 
-            {isAuthenticated ? (
+            {
               <div className="grid gap-4">
                 {companyData.jobs.length === 0 && (
                   <div className="text-center py-12 bg-white rounded-lg border border-warm-200 border-dashed">
@@ -253,27 +262,7 @@ export default function CompanyProfile() {
                     isSaved={isJobSaved(job)}
                   />
                 ))}
-              </div>
-            ) : (
-              <div className="bg-white rounded-xl border border-warm-200 p-8 text-center">
-                <div className="mx-auto w-16 h-16 bg-iris-100 rounded-full flex items-center justify-center mb-4">
-                  <Lock className="w-8 h-8 text-iris-600" />
-                </div>
-                <h3 className="text-lg font-semibold text-warm-900 mb-2">
-                  Sign in to view job listings
-                </h3>
-                <p className="text-warm-500 mb-6 max-w-sm mx-auto">
-                  Create a free account to see all {companyData.totalJobs} open positions at {companyData.name}
-                </p>
-                <Button
-                  onClick={() => login(window.location.href)}
-                  className="bg-iris-600 hover:bg-iris-700 text-white"
-                >
-                  <LogIn className="w-4 h-4 mr-2" />
-                  Sign In with Google
-                </Button>
-              </div>
-            )}
+              </div>}
           </div>
         )}
       </div>
