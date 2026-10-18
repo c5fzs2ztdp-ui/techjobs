@@ -8,6 +8,21 @@ const router = Router();
 // All saved jobs routes require authentication
 router.use(requireAuth);
 
+// Queued client writes (guest-save reconciliation, pending deletes) resolve
+// an expected account before the request and send it in X-Expected-User-Id.
+// The session cookie is shared across tabs and can flip to another account
+// between the client's identity check and this request; when the header is
+// present and disagrees with the authenticated user, reject BEFORE touching
+// the database so a queued write never lands under the wrong account. The
+// client keeps the item queued and retries after confirming the account.
+router.use((req: Request, res: Response, next) => {
+  const expected = req.get('X-Expected-User-Id');
+  if (expected && expected !== req.user!.id) {
+    return res.status(409).json({ error: 'Account changed mid-request', code: 'ACCOUNT_MISMATCH' });
+  }
+  next();
+});
+
 // GET all saved jobs for the current user
 router.get('/', async (req: Request, res: Response) => {
   try {

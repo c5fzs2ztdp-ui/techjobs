@@ -894,6 +894,73 @@ describe('account scoping and edit retention', () => {
     expect(stored[0].syncedTo).toBeUndefined();
   });
 
+  it('binds reconcile uploads to the captured account and stops on a mismatch', async () => {
+    // The server rejects the write because the session flipped to another
+    // account: both queued records must stay local and only one POST is made.
+    let posts = 0;
+    server.use(
+      http.post('/api/saved-jobs', () => {
+        posts += 1;
+        return HttpResponse.json({ error: 'Account changed mid-request', code: 'ACCOUNT_MISMATCH' }, { status: 409 });
+      })
+    );
+    localStorage.setItem('techjobs_saved_jobs', JSON.stringify([
+      { id: 'l1', job_title: 'One', company: 'C', url: 'http://example.com/1', created_date: '2026-10-09T00:00:00.000Z' },
+      { id: 'l2', job_title: 'Two', company: 'C', url: 'http://example.com/2', created_date: '2026-10-09T00:01:00.000Z' },
+    ]));
+
+    await reconcileGuestSavedJobs();
+
+    expect(posts).toBe(1);
+    const stored = JSON.parse(localStorage.getItem('techjobs_saved_jobs') || '[]');
+    expect(stored).toHaveLength(2);
+    expect(stored.every((j: { syncedTo?: string }) => j.syncedTo === undefined)).toBe(true);
+  });
+
+  it('keeps a pending delete queued when the session no longer matches its account', async () => {
+    // The queued id belongs to user-123, but the server reports the session
+    // changed: the id must stay queued instead of being retired by a 404
+    // under the wrong account.
+    server.use(
+      http.delete('/api/saved-jobs/srv-x', () =>
+        HttpResponse.json({ error: 'Account changed mid-request', code: 'ACCOUNT_MISMATCH' }, { status: 409 }))
+    );
+    localStorage.setItem('techjobs_pending_saved_job_deletes', JSON.stringify({ 'user-123': ['srv-x'] }));
+
+    await reconcileGuestSavedJobs();
+
+    const queued = JSON.parse(localStorage.getItem('techjobs_pending_saved_job_deletes') || '{}');
+    expect(queued['user-123']).toEqual(['srv-x']);
+  });
+
+  it('queues a failed server-row delete for retry and hides the row from lists', async () => {
+    server.use(
+      http.get('/api/saved-jobs', () =>
+        HttpResponse.json([{ id: 'srv-1', job_title: 'Synced', company: 'C', url: 'http://example.com/s', applied: false, created_date: '2026-10-09T00:00:00.000Z' }])),
+      http.delete('/api/saved-jobs/srv-1', () => HttpResponse.error())
+    );
+
+    const removed = await savedJobsApi.delete('srv-1', 'http://example.com/s');
+
+    expect(removed).toBe(true);
+    const queued = JSON.parse(localStorage.getItem('techjobs_pending_saved_job_deletes') || '{}');
+    expect(queued['user-123']).toEqual(['srv-1']);
+    const listed = await savedJobsApi.list();
+    expect(listed.find((j: { id: string }) => j.id === 'srv-1')).toBeUndefined();
+  });
+
+  it('reports failure for a failed server-row delete when the account cannot be resolved', async () => {
+    server.use(
+      http.get('/api/auth/me', () => HttpResponse.error()),
+      http.delete('/api/saved-jobs/srv-9', () => HttpResponse.error())
+    );
+
+    const removed = await savedJobsApi.delete('srv-9', 'http://example.com/s9');
+
+    expect(removed).toBe(false);
+    expect(localStorage.getItem('techjobs_pending_saved_job_deletes')).toBeNull();
+  });
+
   it('does not touch pending deletions owned by another account', async () => {
     // A 404 (or any result) under the current account must not clear a
     // pending deletion that belongs to a different account's row.

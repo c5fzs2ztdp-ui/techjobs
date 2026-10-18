@@ -131,7 +131,11 @@ export const savedJobsApi = {
         const localJobs = getLocalJobs().filter(
           (j) => !j.syncedTo || (accountId !== null && j.syncedTo === accountId),
         );
-        const serverUrls = new Set(serverJobs.map((j) => j.url));
+        // A server row whose deletion is queued for this account stays
+        // hidden until the retry confirms it, instead of resurrecting.
+        const pendingDeletes = new Set(getPendingDeleteIds(accountId));
+        const visibleServerJobs = serverJobs.filter((j) => !pendingDeletes.has(j.id));
+        const serverUrls = new Set(visibleServerJobs.map((j) => j.url));
         const pending = localJobs
           .filter((j) => !serverUrls.has(j.url))
           .map((j) => ({ ...j, pending: true }));
@@ -144,7 +148,7 @@ export const savedJobsApi = {
         );
         return [
           ...pending,
-          ...serverJobs.map((j) => (unresolvedUrls.has(j.url) ? { ...j, pending: true } : j)),
+          ...visibleServerJobs.map((j) => (unresolvedUrls.has(j.url) ? { ...j, pending: true } : j)),
         ];
       } catch (error) {
         console.error('Backend error, falling back to localStorage:', error);
@@ -293,8 +297,18 @@ export const savedJobsApi = {
         console.error('Backend error, falling back to localStorage:', error);
     const jobs = getLocalJobs();
     const filtered = jobs.filter(j => j.id !== id);
-    if (filtered.length === jobs.length) return false;
-    setLocalJobs(filtered);
+    if (filtered.length < jobs.length) {
+      setLocalJobs(filtered);
+      return true;
+    }
+    // The row lives only on the server (a synced account save) and the
+    // DELETE failed: queue it under the owning account so the next
+    // reconciliation retries it, instead of dropping the user's delete.
+    // When the account cannot be resolved there is no safe scope - report
+    // failure so the UI does not claim the row was removed.
+    const accountId = await getAuthenticatedAccountId();
+    if (!accountId) return false;
+    rememberPendingDelete(accountId, id);
     return true;
     }
   },
@@ -311,10 +325,11 @@ export const savedJobsApi = {
  * Returns true once the account durably reflects the guest's state (or has
  * nothing to gain), false when the merge could not complete.
  */
-async function mergeGuestDetailsIntoAccount(guest: SavedJob): Promise<boolean> {
+async function mergeGuestDetailsIntoAccount(guest: SavedJob, accountId: string): Promise<boolean> {
   try {
     const listResponse = await fetch(`${API_BASE_URL}/saved-jobs`, {
       credentials: 'include',
+      headers: { 'X-Expected-User-Id': accountId },
     });
     if (!listResponse.ok) return false;
     const accountJobs: SavedJob[] = await listResponse.json();
@@ -338,7 +353,7 @@ async function mergeGuestDetailsIntoAccount(guest: SavedJob): Promise<boolean> {
     if (Object.keys(merged).length === 0) return true;
     const updateResponse = await fetch(`${API_BASE_URL}/saved-jobs/${existing.id}`, {
       method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', 'X-Expected-User-Id': accountId },
       credentials: 'include',
       body: JSON.stringify(merged),
     });
@@ -408,6 +423,20 @@ function rememberPendingDelete(accountId: string, id: string): void {
   setPendingDeleteMap(map);
 }
 
+// The server rejects an expected-account write whose session no longer
+// matches with 409 { code: 'ACCOUNT_MISMATCH' }; POST uses plain 409 for URL
+// conflicts too, so the body decides.
+function getPendingDeleteIds(accountId: string | null): string[] {
+  const { map, legacy } = getPendingDeleteMap();
+  return accountId ? [...(map[accountId] ?? []), ...legacy] : [];
+}
+
+async function isAccountMismatch(response: Response): Promise<boolean> {
+  if (response.status !== 409) return false;
+  const body: { code?: string } | null = await response.clone().json().catch(() => null);
+  return body?.code === 'ACCOUNT_MISMATCH';
+}
+
 async function flushPendingDeletes(accountId: string): Promise<void> {
   const { map, legacy } = getPendingDeleteMap();
   // Legacy unscoped entries were created under the then-active account; the
@@ -420,9 +449,19 @@ async function flushPendingDeletes(accountId: string): Promise<void> {
       const response = await fetch(`${API_BASE_URL}/saved-jobs/${id}`, {
         method: 'DELETE',
         credentials: 'include',
+        headers: { 'X-Expected-User-Id': accountId },
       });
-      // 2xx or 404: the row is gone either way - stop retrying it.
-      if (!response.ok && response.status !== 404) remaining.push(id);
+      // The server verifies the expected account before deleting, so a 2xx
+      // or 404 here is confirmed for THIS account - stop retrying the id.
+      if (!response.ok && response.status !== 404) {
+        remaining.push(id);
+        if (await isAccountMismatch(response)) {
+          // Session changed mid-flush: every later delete would hit the
+          // wrong account too - keep the rest queued and stop.
+          remaining.push(...ids.slice(ids.indexOf(id) + 1));
+          break;
+        }
+      }
     } catch {
       remaining.push(id);
     }
@@ -534,21 +573,34 @@ async function runReconcileGuestSavedJobs(): Promise<number> {
     };
     const snapshot = JSON.stringify(stripSyncMeta(current));
     try {
+      // The expected-account header binds this write to the account resolved
+      // at the start of the run: if another tab flipped the session before
+      // the request arrived, the server rejects it instead of creating the
+      // row under the wrong account.
       const response = await fetch(`${API_BASE_URL}/saved-jobs`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', 'X-Expected-User-Id': accountId },
         credentials: 'include',
         body: JSON.stringify(record),
       });
       // 2xx: uploaded. 409: the account already has this URL - merge the
       // guest's application details into the account record first, and only
-      // then drop the local copy.
+      // then drop the local copy. 409 with ACCOUNT_MISMATCH: the session
+      // flipped mid-run - keep everything queued and stop.
       if (!response.ok && response.status !== 409) {
         remaining.push(current);
         continue;
       }
       if (response.status === 409) {
-        const merged = await mergeGuestDetailsIntoAccount(current);
+        if (await isAccountMismatch(response)) {
+          // Keep this record and everything not yet attempted - but only
+          // what is still in localStorage (a delete that landed mid-flight
+          // must not be resurrected).
+          const liveIds = new Set(getLocalJobs().map((j) => j.id));
+          remaining.push(...local.slice(local.indexOf(job)).filter((j) => liveIds.has(j.id)));
+          break;
+        }
+        const merged = await mergeGuestDetailsIntoAccount(current, accountId);
         if (!merged) {
           remaining.push(current); // merge failed - keep for next time
           continue;
@@ -576,6 +628,7 @@ async function runReconcileGuestSavedJobs(): Promise<number> {
               const deleteResponse = await fetch(`${API_BASE_URL}/saved-jobs/${created.id}`, {
                 method: 'DELETE',
                 credentials: 'include',
+                headers: { 'X-Expected-User-Id': accountId },
               });
               if (!deleteResponse.ok && deleteResponse.status !== 404) {
                 rememberPendingDelete(accountId, created.id);

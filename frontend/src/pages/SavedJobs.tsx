@@ -78,9 +78,16 @@ export default function SavedJobs() {
 
   const deleteMutation = useMutation({
     mutationFn: ({ id, url }: { id: string; url?: string }) => savedJobsApi.delete(id, url),
-    onSuccess: () => {
+    onSuccess: (removed) => {
       queryClient.invalidateQueries({ queryKey: ['savedJobs'] });
-      toast.success('Job removed from saved');
+      // delete() resolves false when nothing was actually removed or queued
+      // (e.g. the account could not be resolved to scope a retry) - that is
+      // a failure, not a removal.
+      if (removed) {
+        toast.success('Job removed from saved');
+      } else {
+        toast.error('Failed to remove job');
+      }
     },
     onError: () => {
       toast.error('Failed to remove job');
