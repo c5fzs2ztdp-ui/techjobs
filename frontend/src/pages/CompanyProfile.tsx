@@ -6,7 +6,7 @@ import { createPageUrl } from "@/utils";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import {
-  ArrowLeft, MapPin, Users, Globe,
+  ArrowLeft, MapPin, Globe,
   Search, Briefcase
 } from "lucide-react";
 import { Input } from "@/components/ui/input";
@@ -145,7 +145,7 @@ export default function CompanyProfile() {
 
                 <div className="flex flex-col gap-3 min-w-[200px]">
                   <div className="flex items-center gap-2 text-warm-600">
-                    <Users className="w-4 h-4 text-warm-400" />
+                    <MapPin className="w-4 h-4 text-warm-400" />
                     <span>
                       {companyData.locations.join(', ') || 'Location not specified'}
                     </span>
