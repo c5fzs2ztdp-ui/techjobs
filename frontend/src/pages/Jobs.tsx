@@ -11,6 +11,7 @@ import FilterSidebar from "@/components/jobs/FilterSidebar";
 import { EMPTY_FILTERS, type Filters } from "@/components/jobs/filters";
 import SearchHeader from "@/components/jobs/SearchHeader";
 import JobCard from "@/components/jobs/JobCard";
+import { downloadJobsCsv } from "@/components/jobs/exportCsv";
 import JobsLoader from "@/components/jobs/JobsLoader";
 import { CATEGORY_LABELS, displayCity, fetchJobsPayload, isClosed, JOBS_PAYLOAD_QUERY_KEY, selectCityLabels, selectSortedJobs, type Job } from "@/components/jobs/jobsData";
 import { savedJobsApi } from "@/api/storage";
@@ -378,6 +379,8 @@ export default function Jobs() {
             totalJobs={filteredJobs.length}
             activeFiltersCount={activeFiltersCount}
             isLoading={isLoading}
+            onExportCsv={() => downloadJobsCsv(filteredJobs)}
+            exportCount={filteredJobs.length}
           />
 
           <div className="flex-1 overflow-y-auto p-4">

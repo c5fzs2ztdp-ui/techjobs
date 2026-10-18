@@ -1,6 +1,6 @@
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { Search, SlidersHorizontal, Bookmark } from "lucide-react";
+import { Search, SlidersHorizontal, Bookmark, Download } from "lucide-react";
 import { Link } from "react-router-dom";
 import { createPageUrl } from "@/utils";
 
@@ -11,6 +11,9 @@ interface SearchHeaderProps {
   totalJobs: number;
   activeFiltersCount: number;
   isLoading?: boolean;
+  /** When provided, an Export CSV button is shown (exports the filtered list). */
+  onExportCsv?: () => void;
+  exportCount?: number;
 }
 
 export default function SearchHeader({ 
@@ -19,7 +22,9 @@ export default function SearchHeader({
   onFilterClick, 
   totalJobs,
   activeFiltersCount,
-  isLoading = false
+  isLoading = false,
+  onExportCsv,
+  exportCount = 0
 }: SearchHeaderProps) {
   return (
     <div className="sticky top-0 z-30 bg-white/80 backdrop-blur-lg border-b border-warm-200" role="search">
@@ -39,6 +44,18 @@ export default function SearchHeader({
           </div>
 
           <div className="flex gap-2">
+            {onExportCsv && (
+              <Button
+                variant="outline"
+                onClick={onExportCsv}
+                disabled={exportCount === 0}
+                className="h-11 gap-2"
+                aria-label={`Export ${exportCount} filtered jobs to CSV`}
+              >
+                <Download className="w-4 h-4" aria-hidden="true" />
+                Export CSV
+              </Button>
+            )}
             <Button
               variant="outline"
               onClick={onFilterClick}
