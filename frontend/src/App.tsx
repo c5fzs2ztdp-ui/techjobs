@@ -15,6 +15,7 @@ import Map from '@/pages/Map';
 import PrivacyPolicy from '@/pages/PrivacyPolicy';
 import TermsOfService from '@/pages/TermsOfService';
 import AccessibilityStatement from '@/pages/AccessibilityStatement';
+import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -101,6 +102,14 @@ function App() {
             element={
               <Layout currentPageName="AccessibilityStatement">
                 <AccessibilityStatement />
+              </Layout>
+            }
+          />
+          <Route
+            path="*"
+            element={
+              <Layout currentPageName="NotFound">
+                <NotFound />
               </Layout>
             }
           />
