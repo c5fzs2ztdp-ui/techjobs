@@ -53,11 +53,18 @@ export function useGuestGate(timerActive = true): GuestGateState {
   const isGuest = !isLoading && !isAuthenticated && !crawler;
 
   const [now, setNow] = useState(() => Date.now());
-  const [start, setStart] = useState<number | null>(null);
+
+  // Anchored once the guest actually sees jobs; persists across reloads.
+  /* eslint-disable react-hooks/purity -- intentional one-time side effect:
+     records the guest's first-visit timestamp in localStorage. */
+  const start = useMemo(
+    () => (isGuest && timerActive ? readGateStart(window.localStorage, Date.now()) : null),
+    [isGuest, timerActive]
+  );
+  /* eslint-enable react-hooks/purity */
 
   useEffect(() => {
     if (!isGuest || !timerActive) return;
-    setStart(readGateStart(window.localStorage, Date.now()));
     const tick = window.setInterval(() => setNow(Date.now()), 1000);
     return () => window.clearInterval(tick);
   }, [isGuest, timerActive]);
