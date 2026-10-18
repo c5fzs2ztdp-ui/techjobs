@@ -4,9 +4,10 @@
   "description": "A full-stack application for browsing Israeli tech jobs, built with React, Express.js, and SQLite.",
   "main": "index.js",
   "scripts": {
-    "test": "npm run test:backend && npm run test:frontend",
+    "test": "npm run test:backend && npm run test:frontend && npm run test:scripts",
     "test:backend": "cd backend && npm test",
-    "test:frontend": "cd frontend && npm run test:run"
+    "test:frontend": "cd frontend && npm run test:run",
+    "test:scripts": "node --test scripts/convert_jobs.test.mjs"
   },
   "repository": {
     "type": "git",
