@@ -142,14 +142,23 @@ CITY_MATCHERS.sort((a, b) => b.len - a.len);
 const NON_CITY = /^\s*(il(,\s*il)?|home( office)?|israel(,\s*il)?|\d+ locations?|various locations.*|multiple locations|remote|israel wide|all israel|hybrid)\s*$/i;
 const JUNK_CITY = /https?:\/\/|www\.|\.co(m)?\b|careers/i;
 
+// District labels are fallback evidence, not cities: a concrete city anywhere
+// in the location beats a district ("Eilat, Southern District, Israel" is
+// Eilat, region negev - not Southern District/south). Districts match only
+// when no concrete city matched.
+const DISTRICT_ENS = new Set(['Central District', 'Northern District', 'Southern District']);
+
 export function normalizeCity(raw) {
   if (!raw) return { city: null, cityHe: null };
   const trimmed = raw.trim();
   if (NON_CITY.test(trimmed) || JUNK_CITY.test(trimmed)) return { city: null, cityHe: null };
   const lower = trimmed.toLowerCase();
-  for (const m of CITY_MATCHERS) {
-    if (m.test ? m.test.test(lower) : lower.includes(m.needle)) {
-      return { city: m.en, cityHe: m.he };
+  for (const allowDistricts of [false, true]) {
+    for (const m of CITY_MATCHERS) {
+      if (!allowDistricts && DISTRICT_ENS.has(m.en)) continue;
+      if (m.test ? m.test.test(lower) : lower.includes(m.needle)) {
+        return { city: m.en, cityHe: m.he };
+      }
     }
   }
   // Never pass through an unmapped raw string: city is canonical-only-or-null
@@ -171,18 +180,25 @@ const TITLE_RULES = [
   ['mechanical-manufacturing', /manufacturing automation|industrial automation/],
   ['hardware-electronics', /\b(vlsi|asic|fpga|silicon|cad|chip)\b[^,]*automation|automation[^,]*\b(vlsi|asic|fpga|silicon|cad|chip)\b/],
   ['qa', /\bqa\b|quality assurance|\bsdet\b|test automation|automation (test|testing)|\btest(s|ing)? engineer|בדיקות תוכנה|בודק\/?\.?ת? תוכנה/],
-  ['security', /cyber|infosec|appsec|devsecops|product security|security (engineer|research(er)?|architect|analyst|consultant|expert|advisor)|\bsoc analyst|penetration test|malware|vulnerabilit|threat (prevention|intelligence|hunt)|incident response|endpoint (security|protection|research)|סייבר|אבטחת מידע|אבטחת מערכות/],
-  ['devops', /devops|\bsre\b|site reliability|platform engineer|infrastructure engineer|finops|cloud (engineer|architect)|systems? administrator|\bsysadmin|network engineer|\bit (engineer|manager|specialist)|דבאופס|תשתיות (מחשוב|מידע|טכנולוג)|מנהל\/?\.?ת? מערכת|סיסטם/],
-  ['data-ai', /data scien|data engineer|data analy|machine learning|deep learning|artificial intelligence|\bmlops\b|\bml (engineer|researcher)|\bai\b|data platform|algorithm|research scien|computer vision|\bnlp\b|big data|business intelligence|\bbi (developer|analyst|engineer)|דאטה|נתונים|למידת מכונה|בינה מלאכותית|אלגוריתמ/],
-  ['hardware-electronics', /hardware|fpga|asic|vlsi|embedded|firmware|\bsilicon\b|electronics|\bpcb\b|\brf engineer|board design|validation engineer|verification engineer|\bdft\b|\bmems\b|חומרה|אלקטרוניקה|מהנדס\/?\.?ת? מערכ|אינטגרציה|שילובים|תקשורת|ניווט/],
-  ['mechanical-manufacturing', /mechanical|mechatronics|manufacturing|production (engineer|manager|operator|worker|line)|machinist|technician|maintenance|\bcnc\b|welder|electrician|industrial engineer|process engineer|quality (engineer|technician|inspector|systems|manager)|מכונות|מכאנ|מכונאי|טכנאי|תכן|מכני|מתקין|יצור|טכנולוג(\.?ית)?(?![א-ת])|technologist|אחזקה|ייצור|תעשייה וניהול|מהנדס\/?\.?ת? תעשייה|חשמלאי|רתך|מסגר|איכות|הנדסאי|מכטרוניקה|בקרת הינע/],
-  ['design', /designer|\bux\b|\bui\b|graphic|motion design|מעצב|חוויית? משתמש|גרפיק/],
+  // Explicit occupations (design, sales, marketing) outrank the broad
+  // technology qualifiers below: "AI Sales Specialist" is a sales role,
+  // "Senior Product Designer - Harmony AI" is a design role, and
+  // "Enterprise Account Executive (Cyber)" is a sales role.
+  // Engineering "designers" (PCB/Logic/Mechanical/Antenna/RFIC/Physical) are
+  // hardware-mechanical roles, not design: the lookbehind blocks them so they
+  // fall through to the hardware/mechanical rules below.
+  ['design', /(?<!(pcb|layout|logic|mechanical|antenna|rfic|physical|electrical|hardware|asic|chip|silicon)\s)designer|\bux\b|\bui\b|graphic|motion design|מעצב|חוויית? משתמש|גרפיק/],
   // Specific support roles must match before the general account-manager
   // sales rule below - first match wins.
   ['customer-support', /technical account manager|\btam\b/],
   ['sales', /sales|account executive|account manager|business development|\bbdr\b|\bsdr\b|pre-?sales|מכירות|פיתוח עסקי|מנהל\/?\.?ת? לקוחות|יועץ\/?\.?ת? מכירות/],
   ['customer-support', /customer (support|success|service|experience)|technical support|help ?desk|support (engineer|specialist|representative)|\btam\b|technical account manager|client services?|professional services|שירות לקוחות|נציג\/?\.?ת?( שירות| |$)|תמיכה|מוקד|הצלחת לקוח/],
   ['marketing', /marketing|growth (manager|marketing)|\bseo\b|content (writer|manager)|brand|demand generation|campaign|copywriter|social media|שיווק|משווק|מותג|קמפיין|דיגיטל/],
+  ['security', /cyber|infosec|appsec|devsecops|product security|security (engineer|research(er)?|architect|analyst|consultant|expert|advisor)|\bsoc analyst|penetration test|malware|vulnerabilit|threat (prevention|intelligence|hunt)|incident response|endpoint (security|protection|research)|סייבר|אבטחת מידע|אבטחת מערכות/],
+  ['devops', /devops|\bsre\b|site reliability|platform engineer|infrastructure engineer|finops|cloud (engineer|architect)|systems? administrator|\bsysadmin|network engineer|\bit (engineer|manager|specialist)|דבאופס|תשתיות (מחשוב|מידע|טכנולוג)|מנהל\/?\.?ת? מערכת|סיסטם/],
+  ['data-ai', /data scien|data engineer|data analy|machine learning|deep learning|artificial intelligence|\bmlops\b|\bml (engineer|researcher)|\bai\b|data platform|algorithm|research scien|computer vision|\bnlp\b|big data|business intelligence|\bbi (developer|analyst|engineer)|דאטה|נתונים|למידת מכונה|בינה מלאכותית|אלגוריתמ/],
+  ['hardware-electronics', /hardware|fpga|asic|vlsi|embedded|firmware|\bsilicon\b|electronics|\bpcb\b|\brfic\b|antenna|physical design|\brf engineer|board design|validation engineer|verification engineer|\bdft\b|\bmems\b|חומרה|אלקטרוניקה|מהנדס\/?\.?ת? מערכ|אינטגרציה|שילובים|תקשורת|ניווט/],
+  ['mechanical-manufacturing', /mechanical|mechatronics|manufacturing|production (engineer|manager|operator|worker|line)|machinist|technician|maintenance|\bcnc\b|welder|electrician|industrial engineer|process engineer|quality (engineer|technician|inspector|systems|manager)|מכונות|מכאנ|מכונאי|טכנאי|תכן|מכני|מתקין|יצור|טכנולוג(\.?ית)?(?![א-ת])|technologist|אחזקה|ייצור|תעשייה וניהול|מהנדס\/?\.?ת? תעשייה|חשמלאי|רתך|מסגר|איכות|הנדסאי|מכטרוניקה|בקרת הינע/],
   ['finance', /financ|controller|accountant|accounting|bookkeep|payroll|\bcfo\b|fp&a|auditor|treasury|\beconomist\b|כספים|הנהלת חשבונות|הנה"ח|רואה חשבון|רו"ח|חשב\/?\.?ת?|כלכלה|כלכלן|פיננס/],
   ['operations-logistics', /operations|supply chain|logistics|warehouse|procurement|inventory|shipping|fleet|facilities|\bdriver\b|order management|לוגיסטיק|רכש|קניין|מחסנא|מחסן|אחסנה|הפצה|הובלה|שרשרת אספקה|תפעול|מלאי|מלגז|נהג/],
   ['admin', /administra|office manager|executive assistant|personal assistant|receptionist|secretary|clerical|אדמיניסטר|מזכיר|משרדי|פקיד|(^|[^א-ת])רכז(?=[\/ ]|$)/],
