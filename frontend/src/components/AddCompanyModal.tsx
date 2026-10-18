@@ -118,7 +118,7 @@ export default function AddCompanyModal({ open, onOpenChange }: AddCompanyModalP
     // destination from accessing window.opener.
     const base =
       (import.meta.env.VITE_SUBMIT_COMPANY_URL as string) ||
-      'https://github.com/c5fzs2ztdp-ui/techjobs';
+      'https://github.com/natifridman/techjobs';
     const title = encodeURIComponent(`Add company: ${formData.name}`);
     const body = encodeURIComponent('```json\n' + generateJson() + '\n```');
     window.open(`${base}/issues/new?title=${title}&body=${body}`, '_blank', 'noopener');

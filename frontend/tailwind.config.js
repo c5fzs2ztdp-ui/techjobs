@@ -25,6 +25,10 @@ export default {
           400: '#E8956A',
           500: '#D97C4D',
           600: '#C46A3A',
+          // 700/800: AA-compliant with white text (4.5:1+) - use for filled
+          // buttons and for copper text on light backgrounds.
+          700: '#A8542C',
+          800: '#8F4523',
         },
         // Warm Neutrals
         warm: {

@@ -34,7 +34,7 @@ const categories = [
   { name: "Finance", slug: "finance", icon: Coins, color: "from-amber-500 to-yellow-600" },
 ];
 
-const FALLBACK_STATS = { jobs: "5,000+", companies: "600+", cities: "45+" };
+const FALLBACK_STATS = { jobs: "7,000+", companies: "600+", cities: "45+" };
 
 export default function Home() {
   const { data: payload } = useQuery({
@@ -59,9 +59,7 @@ export default function Home() {
     const companies = new Set(jobs.map(j => j.company)).size;
     const cities = new Set(jobs.flatMap(j => j.cities || [])).size;
     return [
-      // Marketing-style figure, rounded down to a stable 5k step rather than
-      // the exact live count (requested: show "5,000+", not "7,015").
-      { label: "Active Jobs", value: `${(Math.floor(jobs.length / 5000) * 5000).toLocaleString()}+`, icon: Briefcase },
+      { label: "Active Jobs", value: jobs.length.toLocaleString(), icon: Briefcase },
       { label: "Tech Companies", value: companies.toLocaleString(), icon: Building2 },
       { label: "Cities Covered", value: String(cities), icon: MapPin },
     ];
@@ -115,7 +113,7 @@ export default function Home() {
               <Button
                 asChild
                 size="lg"
-                className="bg-copper-500 text-white hover:bg-copper-600 text-lg px-8 py-6 rounded-xl shadow-xl shadow-black/20"
+                className="bg-copper-700 text-white hover:bg-copper-800 text-lg px-8 py-6 rounded-xl shadow-xl shadow-black/20"
               >
                 <Link to={createPageUrl("Jobs")}>
                   <Search className="w-5 h-5 mr-2" />
@@ -222,7 +220,7 @@ export default function Home() {
           <Button
             asChild
             size="lg"
-            className="bg-copper-500 hover:bg-copper-600 text-lg px-8 py-6 rounded-xl"
+            className="bg-copper-700 hover:bg-copper-800 text-lg px-8 py-6 rounded-xl"
           >
             <Link to={createPageUrl("Jobs")}>
               Start Searching Now
@@ -236,10 +234,10 @@ export default function Home() {
       <footer className="bg-warm-900 py-8">
         <div className="max-w-7xl mx-auto px-4 text-center space-y-4">
           <Button
-            variant="outline"
+            variant="ghost"
             size="sm"
             onClick={() => setShowAddCompany(true)}
-            className="border-warm-700 text-warm-300 hover:text-white hover:bg-warm-800 gap-2"
+            className="border border-warm-700 text-warm-300 hover:text-white hover:bg-warm-800 gap-2"
             aria-label="Add your company to TechJobsIL"
           >
             <Plus className="w-4 h-4" aria-hidden="true" />
@@ -264,7 +262,7 @@ export default function Home() {
             </Button>
           </nav>
 
-          <p className="text-warm-500 text-xs">
+          <p className="text-warm-400 text-xs">
             © {new Date().getFullYear()} TechJobsIL. All rights reserved.
           </p>
         </div>

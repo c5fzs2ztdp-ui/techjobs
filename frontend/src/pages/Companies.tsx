@@ -108,7 +108,7 @@ export default function Companies() {
                 Find the perfect workplace for your next career move.
               </p>
             </div>
-            <Button asChild className="bg-copper-500 text-white hover:bg-copper-600 border-none shadow-lg">
+            <Button asChild className="bg-copper-700 text-white hover:bg-copper-800 border-none shadow-lg">
               <Link to={createPageUrl("Jobs")}>
                 <Briefcase className="w-4 h-4 mr-2" />
                 Browse Jobs
