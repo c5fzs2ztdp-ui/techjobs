@@ -526,3 +526,117 @@ describe('guest create dedupe', () => {
     expect(JSON.parse(localStorage.getItem('techjobs_saved_jobs') || '[]')).toHaveLength(1);
   });
 });
+
+describe('reconcileGuestSavedJobs - reviewer regressions', () => {
+  beforeEach(() => {
+    localStorage.clear();
+  });
+
+  const guestJob = (over: Record<string, unknown> = {}) => ({
+    id: 'local-1',
+    job_title: 'Guest Job',
+    company: 'Guest Corp',
+    url: 'http://example.com/job-1',
+    applied: false,
+    applied_date: null,
+    comments: 'old comment',
+    created_date: '2026-10-09T00:00:00.000Z',
+    ...over,
+  });
+
+  it('preserves edits made while the initial upload is pending (409 merge pushes the newer local comment)', async () => {
+    // First reconciliation: the POST is delayed; the user edits the comment
+    // mid-flight via savedJobsApi.update (server does not know the local id).
+    let resolvePost: (() => void) | null = null;
+    server.use(
+      http.post('/api/saved-jobs', async () => {
+        await new Promise<void>((resolve) => { resolvePost = resolve; });
+        return HttpResponse.json({ id: 'server-1' }, { status: 201 });
+      }),
+      http.put('/api/saved-jobs/local-1', () => new HttpResponse(null, { status: 404 }))
+    );
+    localStorage.setItem('techjobs_saved_jobs', JSON.stringify([guestJob()]));
+
+    const first = reconcileGuestSavedJobs();
+    await new Promise((r) => setTimeout(r, 20)); // let the POST get in flight
+    await savedJobsApi.update('local-1', { comments: 'new comment' });
+    resolvePost!();
+    await first;
+
+    // The edit survived the first reconciliation locally.
+    const stored = JSON.parse(localStorage.getItem('techjobs_saved_jobs') || '[]');
+    expect(stored).toHaveLength(1);
+    expect(stored[0].comments).toBe('new comment');
+
+    // Second reconciliation: the account has the OLD comment from the first
+    // upload; the newer local edit must win and nothing may be lost.
+    let putBody: Record<string, unknown> | null = null;
+    server.use(
+      http.get('/api/saved-jobs', () =>
+        HttpResponse.json([{ id: 'server-1', job_title: 'Guest Job', company: 'Guest Corp', url: 'http://example.com/job-1', applied: false, applied_date: null, comments: 'old comment' }])
+      ),
+      http.post('/api/saved-jobs', () => HttpResponse.json({ error: 'Already exists' }, { status: 409 })),
+      http.put('/api/saved-jobs/server-1', async ({ request }) => {
+        putBody = await request.json() as Record<string, unknown>;
+        return HttpResponse.json({ id: 'server-1', ...putBody });
+      })
+    );
+
+    await reconcileGuestSavedJobs();
+
+    expect(putBody).toMatchObject({ comments: 'new comment' });
+    expect(localStorage.getItem('techjobs_saved_jobs')).toBeNull();
+  });
+
+  it('skips queued saves deleted during reconciliation', async () => {
+    // Two guest saves; delay the first POST, delete the second through
+    // savedJobsApi.delete (server 404 -> local removal). The reconciliation
+    // loop must not upload the deleted record.
+    const postedUrls: string[] = [];
+    let resolvePost: (() => void) | null = null;
+    server.use(
+      http.post('/api/saved-jobs', async ({ request }) => {
+        const body = await request.json() as { url: string };
+        if (body.url === 'http://example.com/job-1') {
+          await new Promise<void>((resolve) => { resolvePost = resolve; });
+        }
+        postedUrls.push(body.url);
+        return HttpResponse.json({ id: `server-${postedUrls.length}` }, { status: 201 });
+      }),
+      http.delete('/api/saved-jobs/local-2', () => new HttpResponse(null, { status: 404 }))
+    );
+    localStorage.setItem('techjobs_saved_jobs', JSON.stringify([
+      guestJob(),
+      guestJob({ id: 'local-2', url: 'http://example.com/job-2' }),
+    ]));
+
+    const done = reconcileGuestSavedJobs();
+    await new Promise((r) => setTimeout(r, 20)); // first POST in flight
+    await savedJobsApi.delete('local-2');
+    resolvePost!();
+    await done;
+
+    expect(postedUrls).toEqual(['http://example.com/job-1']);
+    expect(JSON.parse(localStorage.getItem('techjobs_saved_jobs') || '[]')).toHaveLength(0);
+  });
+
+  it('keeps failed duplicate merges visible as pending on the account row', async () => {
+    // POST 409 + GET account row + PUT 500: the guest record stays local for
+    // retry, and list() must still expose it as pending on the account row.
+    const accountRow = { id: 'server-1', job_title: 'Guest Job', company: 'Guest Corp', url: 'http://example.com/job-1', applied: false, applied_date: null, comments: 'account note' };
+    server.use(
+      http.get('/api/saved-jobs', () => HttpResponse.json([accountRow])),
+      http.post('/api/saved-jobs', () => HttpResponse.json({ error: 'Already exists' }, { status: 409 })),
+      http.put('/api/saved-jobs/server-1', () => new HttpResponse(null, { status: 500 }))
+    );
+    localStorage.setItem('techjobs_saved_jobs', JSON.stringify([guestJob({ applied: true, applied_date: '2026-10-10', comments: 'guest note' })]));
+
+    await reconcileGuestSavedJobs();
+    // retained locally for retry
+    expect(JSON.parse(localStorage.getItem('techjobs_saved_jobs') || '[]')).toHaveLength(1);
+
+    const jobs = await savedJobsApi.list();
+    expect(jobs).toHaveLength(1);
+    expect(jobs[0]).toMatchObject({ id: 'server-1', pending: true });
+  });
+});
