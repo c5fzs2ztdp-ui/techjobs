@@ -261,12 +261,28 @@ export const savedJobsApi = {
   // edit); without it the local copy would resurrect the save on the next
   // reconciliation.
   delete: async (id: string, url?: string): Promise<boolean> => {
+      // Resolve the account BEFORE the request and bind the delete to it: a
+      // session flip between this check and the server is rejected as
+      // ACCOUNT_MISMATCH (and retried under this same account) instead of
+      // deleting - or queueing the retry - under the wrong account.
+      const accountId = await getAuthenticatedAccountId();
       try {
         const response = await fetch(`${API_BASE_URL}/saved-jobs/${id}`, {
         method: 'DELETE',
-        credentials: 'include'
+        credentials: 'include',
+        headers: accountId ? { 'X-Expected-User-Id': accountId } : undefined
         });
-      
+
+      if (response.status === 409 && await isAccountMismatch(response)) {
+        // The session changed before the request arrived; nothing was
+        // deleted. Queue the delete under the account it was resolved for.
+        if (accountId) {
+          rememberPendingDelete(accountId, id);
+          return true;
+        }
+        return false;
+      }
+
       if (response.status === 401) {
         // Not authenticated - use localStorage
         const jobs = getLocalJobs();
@@ -278,16 +294,15 @@ export const savedJobsApi = {
       
         if (!response.ok && response.status !== 404) throw new Error('Failed to delete');
         if (response.ok && url) {
-          const accountId = await getAuthenticatedAccountId();
           const jobs = getLocalJobs();
           const filtered = jobs.filter((j) => !(j.url === url && canMirrorToRecord(j, accountId)));
           if (filtered.length < jobs.length) setLocalJobs(filtered);
         }
         if (response.status === 404) {
-          // Confirmed absent for this account: remove a pending local record
-          // by id, and any retained local duplicate of the same job by URL,
-          // or the next reconciliation recreates the deleted save.
-          const accountId = await getAuthenticatedAccountId();
+          // Confirmed absent for this account (the header above makes the
+          // 404 account-verified): remove a pending local record by id, and
+          // any retained local duplicate of the same job by URL, or the
+          // next reconciliation recreates the deleted save.
           const jobs = getLocalJobs();
           const filtered = jobs.filter((j) => j.id !== id && !(url && j.url === url && canMirrorToRecord(j, accountId)));
           if (filtered.length < jobs.length) { setLocalJobs(filtered); return true; }
@@ -302,11 +317,10 @@ export const savedJobsApi = {
       return true;
     }
     // The row lives only on the server (a synced account save) and the
-    // DELETE failed: queue it under the owning account so the next
-    // reconciliation retries it, instead of dropping the user's delete.
-    // When the account cannot be resolved there is no safe scope - report
-    // failure so the UI does not claim the row was removed.
-    const accountId = await getAuthenticatedAccountId();
+    // DELETE failed: queue it under the account resolved before the
+    // request so the next reconciliation retries it, instead of dropping
+    // the user's delete. When the account cannot be resolved there is no
+    // safe scope - report failure so the UI does not claim removal.
     if (!accountId) return false;
     rememberPendingDelete(accountId, id);
     return true;
