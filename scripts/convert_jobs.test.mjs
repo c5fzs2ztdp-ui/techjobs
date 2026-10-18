@@ -288,3 +288,25 @@ test('structured Israeli cities beat a raw foreign location', () => {
   assert.equal(isForeignOnlyListing({ city: 'Tel Aviv', location: 'New York, United States' }), false);
   assert.equal(isForeignOnlyListing({ location: 'New York, United States', cities: [] }), true);
 });
+
+// Review finding: upstream cities entries must normalize like the primary
+// city - an alias (Tel Aviv-Yafo) canonicalizes onto Tel Aviv instead of
+// coexisting with it and inflating facets.
+test('cities array entries are normalized, deduped, and junk discarded', async () => {
+  const { execFileSync } = await import('node:child_process');
+  const os = await import('node:os');
+  const path = await import('node:path');
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'convert-cities-'));
+  try {
+    const input = path.join(tmp, 'in.json');
+    const output = path.join(tmp, 'out.json');
+    fs.writeFileSync(input, JSON.stringify([
+      { company: 'A', title: 'Engineer', url: 'https://x/1', city: 'Tel Aviv', cities: ['Tel Aviv-Yafo', 'Tel Aviv', 'Haifa', 'not-a-city'] },
+    ]));
+    execFileSync(process.execPath, ['scripts/convert_jobs.mjs', input, output]);
+    const payload = JSON.parse(fs.readFileSync(output, 'utf8'));
+    assert.deepEqual(payload.jobs[0].cities, ['Tel Aviv', 'Haifa']);
+  } finally {
+    fs.rmSync(tmp, { recursive: true, force: true });
+  }
+});

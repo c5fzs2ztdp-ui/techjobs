@@ -872,7 +872,7 @@ describe('account scoping and edit retention', () => {
     let meCalls = 0;
     let posts = 0;
     server.use(
-      http.get('/api/auth/me', () => {
+      http.get('/auth/me', () => {
         meCalls += 1;
         return HttpResponse.json({
           authenticated: true,
@@ -969,7 +969,7 @@ describe('account scoping and edit retention', () => {
   it('sends no expected-account header for a guest delete', async () => {
     let seenHeader: string | null = 'unset';
     server.use(
-      http.get('/api/auth/me', () => HttpResponse.json({ authenticated: false, user: null })),
+      http.get('/auth/me', () => HttpResponse.json({ authenticated: false, user: null })),
       http.delete('/api/saved-jobs/local-1', ({ request }) => {
         seenHeader = request.headers.get('X-Expected-User-Id');
         return new HttpResponse(null, { status: 401 });
@@ -988,7 +988,7 @@ describe('account scoping and edit retention', () => {
 
   it('reports failure for a failed server-row delete when the account cannot be resolved', async () => {
     server.use(
-      http.get('/api/auth/me', () => HttpResponse.error()),
+      http.get('/auth/me', () => HttpResponse.error()),
       http.delete('/api/saved-jobs/srv-9', () => HttpResponse.error())
     );
 
@@ -996,6 +996,34 @@ describe('account scoping and edit retention', () => {
 
     expect(removed).toBe(false);
     expect(localStorage.getItem('techjobs_pending_saved_job_deletes')).toBeNull();
+  });
+
+  it('resolves the account through the root-level auth route, never /api/auth/me', async () => {
+    // The backend mounts /auth/me at the root: hitting /api/auth/me must not
+    // happen - when it did, account resolution silently returned null and
+    // reconciliation never ran.
+    let apiAuthCalls = 0;
+    let posts = 0;
+    server.use(
+      http.get('/api/auth/me', () => {
+        apiAuthCalls += 1;
+        return HttpResponse.json({ authenticated: true, user: { id: 'wrong-user' } });
+      }),
+      http.post('/api/saved-jobs', () => {
+        posts += 1;
+        return HttpResponse.json({ id: 'srv-1' }, { status: 201 });
+      })
+    );
+    localStorage.setItem('techjobs_saved_jobs', JSON.stringify([{
+      id: 'local-1', job_title: 'Guest Job', company: 'C', url: 'http://example.com/route-check',
+      created_date: '2026-10-09T00:00:00.000Z',
+    }]));
+
+    await reconcileGuestSavedJobs();
+
+    expect(apiAuthCalls).toBe(0);
+    // The upload only happens when the account resolved - via /auth/me.
+    expect(posts).toBe(1);
   });
 
   it('does not touch pending deletions owned by another account', async () => {

@@ -17,6 +17,10 @@ export default defineConfig({
   test: {
     globals: true,
     environment: 'jsdom',
+    env: {
+      // jobsData requires the feed url; tests stub fetch and never read it.
+      VITE_JOBS_DATA_URL: 'https://example.test/jobs.json',
+    },
     setupFiles: ['./src/__tests__/setup.ts'],
     include: ['src/**/*.{test,spec}.{js,mjs,cjs,ts,mts,cts,jsx,tsx}'],
     coverage: {
