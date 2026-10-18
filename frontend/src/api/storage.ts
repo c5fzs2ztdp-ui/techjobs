@@ -90,8 +90,9 @@ export const savedJobsApi = {
       });
       
       if (response.status === 401) {
-        // Not authenticated - use localStorage
-        const jobs = getLocalJobs();
+        // Not authenticated: show only unclaimed guest saves - a record
+        // synced to an account must not surface after logout.
+        const jobs = getLocalJobs().filter((j) => !j.syncedTo);
         if (sortBy === '-created_date') {
           return jobs.sort((a, b) => 
             new Date(b.created_date).getTime() - new Date(a.created_date).getTime()
@@ -130,7 +131,13 @@ export const savedJobsApi = {
         ];
       } catch (error) {
         console.error('Backend error, falling back to localStorage:', error);
-    const jobs = getLocalJobs();
+    // Same scoping as the success path: unclaimed guest records plus records
+    // owned by the current account; if the identity cannot be confirmed,
+    // fall back to unclaimed records only.
+    const accountId = await getAuthenticatedAccountId();
+    const jobs = getLocalJobs().filter(
+      (j) => !j.syncedTo || (accountId !== null && j.syncedTo === accountId),
+    );
     if (sortBy === '-created_date') {
       return jobs.sort((a, b) => 
         new Date(b.created_date).getTime() - new Date(a.created_date).getTime()
