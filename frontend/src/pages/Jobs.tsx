@@ -168,14 +168,16 @@ export default function Jobs() {
     return Array.from(citySet).sort((a, b) => (cityLabels[a] || a).localeCompare(cityLabels[b] || b));
   }, [jobs, cityLabels]);
 
-  // City params can only be checked once the payload's canonical city list
-  // is known; drop an unknown one so it cannot silently empty the board.
+  // City params validate against the canonical cities actually present in
+  // the payload - not cityLabels, which is an optional translation table
+  // that can lag new cities and would silently drop a valid filter.
+  const validCities = useMemo(() => new Set(jobs.flatMap(job => job.cities)), [jobs]);
   useEffect(() => {
-    if (!initialCity || Object.keys(cityLabels).length === 0) return;
-    if (!cityLabels[initialCity]) {
+    if (!initialCity || validCities.size === 0) return;
+    if (!validCities.has(initialCity)) {
       setFilters(prev => ({ ...prev, cities: prev.cities.filter(c => c !== initialCity) }));
     }
-  }, [initialCity, cityLabels]);
+  }, [initialCity, validCities]);
 
   // Filter jobs
   const filteredJobs = useMemo(() => {
@@ -371,9 +373,17 @@ export default function Jobs() {
           />
 
           <div className="flex-1 overflow-y-auto p-4">
+            {/* A failed background refresh must not replace results that
+                are already on screen from the cached payload. */}
+            {isError && jobs.length > 0 && (
+              <div className="mb-4 flex items-center justify-between rounded-lg bg-amber-50 border border-amber-200 px-4 py-2 text-sm text-amber-800" role="status">
+                <span>Could not refresh the feed - showing the last loaded data.</span>
+                <button type="button" onClick={() => refetch()} className="underline hover:text-amber-900">Retry</button>
+              </div>
+            )}
             {isLoading ? (
               <JobsLoader />
-            ) : isError ? (
+            ) : isError && jobs.length === 0 ? (
               <div className="text-center py-16" role="alert">
                 <Briefcase className="w-16 h-16 text-warm-300 mx-auto mb-4" />
                 <h3 className="text-lg font-medium text-warm-700 mb-2">Jobs could not be loaded</h3>

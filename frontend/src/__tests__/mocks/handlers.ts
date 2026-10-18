@@ -55,6 +55,13 @@ export const handlers = [
       user: mockUser,
     });
   }),
+  // storage.ts calls the same endpoint under the /api base
+  http.get('/api/auth/me', () => {
+    return HttpResponse.json({
+      authenticated: true,
+      user: mockUser,
+    });
+  }),
 
   http.post('/auth/logout', () => {
     return HttpResponse.json({ success: true });

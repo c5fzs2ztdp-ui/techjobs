@@ -88,7 +88,8 @@ export default function Map() {
     staleTime: 1000 * 60 * 5, // 5 minutes
     select: (payload) => selectSortedJobs(payload).filter(j => !isClosed(j)),
   });
-  const error = isError ? 'Failed to load job data. Please try again later.' : null;
+  // Keep the map on a failed background refresh when a payload is cached.
+  const error = isError && jobs.length === 0 ? 'Failed to load job data. Please try again later.' : null;
 
   // Aggregate jobs by city
   const cityData = useMemo(() => {

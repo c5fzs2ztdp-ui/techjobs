@@ -129,13 +129,20 @@ export default function Companies() {
       </div>
 
       <div className="max-w-7xl mx-auto px-4 py-8">
+        {/* A failed background refresh must not replace loaded companies. */}
+        {isError && jobs.length > 0 && (
+          <div className="mb-4 flex items-center justify-between rounded-lg bg-amber-50 border border-amber-200 px-4 py-2 text-sm text-amber-800" role="status">
+            <span>Could not refresh the feed - showing the last loaded data.</span>
+            <button type="button" onClick={() => refetch()} className="underline hover:text-amber-900">Retry</button>
+          </div>
+        )}
         {isLoading ? (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {[...Array(6)].map((_, i) => (
               <div key={i} className="h-48 bg-warm-200 rounded-xl animate-pulse" />
             ))}
           </div>
-        ) : isError ? (
+        ) : isError && jobs.length === 0 ? (
           <div className="text-center py-16" role="alert">
             <p className="text-lg font-medium text-warm-700 mb-2">Companies could not be loaded</p>
             <p className="text-warm-500 mb-4">The live feed did not respond. Check your connection and try again.</p>

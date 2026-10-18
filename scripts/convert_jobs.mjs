@@ -148,11 +148,18 @@ const JUNK_CITY = /https?:\/\/|www\.|\.co(m)?\b|careers/i;
 // when no concrete city matched.
 const DISTRICT_ENS = new Set(['Central District', 'Northern District', 'Southern District']);
 
+// District phrases sharing a name with a real city ("Tel Aviv District",
+// "Haifa District", "Jerusalem District", "Beer Sheva District") are
+// district labels, not city evidence: strip them so they cannot override a
+// concrete city elsewhere in the string ("Herzliya, Tel Aviv District,
+// Israel" is Herzliya).
+const CITY_DISTRICT_SUFFIX = /\b(tel aviv|haifa|jerusalem|beer[- ]?sheva) district\b|מחוז (תל אביב|חיפה|ירושלים|באר שבע)/gi;
+
 export function normalizeCity(raw) {
   if (typeof raw !== 'string' || !raw) return { city: null, cityHe: null };
   const trimmed = raw.trim();
   if (NON_CITY.test(trimmed) || JUNK_CITY.test(trimmed)) return { city: null, cityHe: null };
-  const lower = trimmed.toLowerCase();
+  const lower = trimmed.toLowerCase().replace(CITY_DISTRICT_SUFFIX, ' ');
   for (const allowDistricts of [false, true]) {
     for (const m of CITY_MATCHERS) {
       if (!allowDistricts && DISTRICT_ENS.has(m.en)) continue;
@@ -182,7 +189,7 @@ const TITLE_RULES = [
   // Explicit hardware/mechanical testing contexts outrank the generic
   // software-QA "test engineer" matcher below.
   ['mechanical-manufacturing', /\bmechanical (test|testing) engineer/],
-  ['hardware-electronics', /post-?silicon (test|testing)|\b(ic|asic|fpga|silicon|hardware|electrical|electronics|rf|analog|mixed-?signal|chip|vlsi|soc) (test|testing) engineer/],
+  ['hardware-electronics', /post-?silicon (test|testing)|\b(ic|asic|fpga|silicon|hardware|electrical|electronics|rf|analog|mixed-?signal|chip|vlsi|soc|digital|logic)[a-z -]{0,20}\btest(s|ing)? engineer\b/],
   // "test engineer" is software QA only as a standalone phrase: the trailing
   // boundary keeps "Test Engineering" (e.g. electrical sustaining roles) out.
   ['qa', /\bqa\b|quality assurance|\bsdet\b|test automation|automation (test|testing)|\btest(s|ing)? engineer\b|בדיקות תוכנה|בודק\/?\.?ת? תוכנה/],
@@ -206,7 +213,7 @@ const TITLE_RULES = [
   // SoC = silicon only when adjacent to chip terms; bare "SOC" is usually a
   // security operations center ("SOC Analyst", "Autonomous SOC", "מנהל/ת SOC").
   ['hardware-electronics', /\bsoc\b[^,]*(design|verification|verif|power|clock|rtl|physical|silicon|chip|dft|ip|subsystem|architect|test|product|quality|reliability)|\b(design|verification|power|clock|rtl|physical|silicon|chip|dft|ip|test)[^,]*\bsoc\b/],
-  ['hardware-electronics', /\belectrical engineer\b|hardware|fpga|asic|vlsi|embedded|firmware|\bsilicon\b|electronics|\bpcb\b|\brfic\b|antenna|physical design|\brf\b|board design|validation engineer|verification engineer|\bdft\b|\bmems\b|חומרה|אלקטרוניקה|מהנדס\/?\.?ת? מערכ|אינטגרציה|שילובים|תקשורת|ניווט/],
+  ['hardware-electronics', /\belectrical engineer\b|מהנדס\/?\.?ת? חשמל|\blogic design\b|hardware|fpga|asic|vlsi|embedded|firmware|\bsilicon\b|electronics|\bpcb\b|\brfic\b|antenna|physical design|\brf\b|board design|validation engineer|verification engineer|\bdft\b|\bmems\b|חומרה|אלקטרוניקה|מהנדס\/?\.?ת? מערכ|אינטגרציה|שילובים|תקשורת|ניווט/],
   ['mechanical-manufacturing', /mechanical|mechatronics|manufacturing|production (engineer|manager|operator|worker|line)|machinist|technician|maintenance|\bcnc\b|welder|electrician|industrial engineer|process engineer|quality (engineer|technician|inspector|systems|manager)|מכונות|מכאנ|מכונאי|טכנאי|תכן|מכני|מתקין|יצור|טכנולוג(\.?ית)?(?![א-ת])|technologist|אחזקה|ייצור|תעשייה וניהול|מהנדס\/?\.?ת? תעשייה|חשמלאי|רתך|מסגר|איכות|הנדסאי|מכטרוניקה|בקרת הינע/],
   ['finance', /financ|controller|accountant|accounting|bookkeep|payroll|\bcfo\b|fp&a|auditor|treasury|\beconomist\b|כספים|הנהלת חשבונות|הנה"ח|רואה חשבון|רו"ח|חשב\/?\.?ת?|כלכלה|כלכלן|פיננס/],
   ['operations-logistics', /operations|supply chain|logistics|warehouse|procurement|inventory|shipping|fleet|facilities|\bdriver\b|order management|לוגיסטיק|רכש|קניין|מחסנא|מחסן|אחסנה|הפצה|הובלה|שרשרת אספקה|תפעול|מלאי|מלגז|נהג/],
@@ -247,17 +254,22 @@ const FOREIGN_COUNTRY_NAME = /\bunited kingdom\b|\bUK\b|\bgermany\b|\bindia\b|\b
 const US_ABBR = /\bUSA\b|\bU\.S\.A?\.?\b/;
 const ISRAEL_MARK = /israel|ישראל/i;
 export function isForeignOnlyListing(j) {
-  const loc = typeof j.location === 'string' && j.location ? j.location
-    : typeof j.city === 'string' ? j.city : '';
-  if (!loc) return false;
-  if (!FOREIGN_COUNTRY_NAME.test(loc) && !US_ABBR.test(loc)) return false;
-  if (ISRAEL_MARK.test(loc)) return false;
-  // "City, IL" / "USA / IL": a standalone trailing IL is the Israel country
-  // code used by Israeli boards (e.g. Comeet), not Illinois.
-  if (/(^|[\/,;|])\s*IL\s*$/.test(loc.trim())) return false;
-  // A canonical Israeli city anywhere in the location means the role
-  // genuinely includes Israel.
-  return normalizeCity(loc).city === null;
+  const locs = [
+    j.location, j.city,
+    ...(Array.isArray(j.cities) ? j.cities : []),
+  ].filter((s) => typeof s === 'string' && s.length > 0);
+  // Not explicitly foreign at all (or only structured Israeli locations).
+  if (!locs.some((l) => FOREIGN_COUNTRY_NAME.test(l) || US_ABBR.test(l))) return false;
+  // Any sign of Israel in any structured or raw location keeps the row: an
+  // Israel mention, a trailing "IL" country code (Israeli boards' suffix,
+  // not Illinois), or a canonical Israeli city - including a canonical
+  // `cities` entry that contradicts a raw foreign `location` string.
+  for (const l of locs) {
+    if (ISRAEL_MARK.test(l)) return false;
+    if (/(^|[\/,;|])\s*IL\s*$/.test(l.trim())) return false;
+    if (normalizeCity(l).city !== null) return false;
+  }
+  return true;
 }
 
 // --- Convert ---
