@@ -179,7 +179,13 @@ const TITLE_RULES = [
   // generic automation QA match (and before the \bai\b data-ai match).
   ['mechanical-manufacturing', /manufacturing automation|industrial automation/],
   ['hardware-electronics', /\b(vlsi|asic|fpga|silicon|cad|chip)\b[^,]*automation|automation[^,]*\b(vlsi|asic|fpga|silicon|cad|chip)\b/],
-  ['qa', /\bqa\b|quality assurance|\bsdet\b|test automation|automation (test|testing)|\btest(s|ing)? engineer|בדיקות תוכנה|בודק\/?\.?ת? תוכנה/],
+  // Explicit hardware/mechanical testing contexts outrank the generic
+  // software-QA "test engineer" matcher below.
+  ['mechanical-manufacturing', /\bmechanical (test|testing) engineer/],
+  ['hardware-electronics', /post-?silicon (test|testing)|\b(ic|asic|fpga|silicon|hardware|electrical|electronics|rf|analog|mixed-?signal|chip|vlsi|soc) (test|testing) engineer/],
+  // "test engineer" is software QA only as a standalone phrase: the trailing
+  // boundary keeps "Test Engineering" (e.g. electrical sustaining roles) out.
+  ['qa', /\bqa\b|quality assurance|\bsdet\b|test automation|automation (test|testing)|\btest(s|ing)? engineer\b|בדיקות תוכנה|בודק\/?\.?ת? תוכנה/],
   // Explicit occupations (design, sales, marketing) outrank the broad
   // technology qualifiers below: "AI Sales Specialist" is a sales role,
   // "Senior Product Designer - Harmony AI" is a design role, and
@@ -200,7 +206,7 @@ const TITLE_RULES = [
   // SoC = silicon only when adjacent to chip terms; bare "SOC" is usually a
   // security operations center ("SOC Analyst", "Autonomous SOC", "מנהל/ת SOC").
   ['hardware-electronics', /\bsoc\b[^,]*(design|verification|verif|power|clock|rtl|physical|silicon|chip|dft|ip|subsystem|architect|test|product|quality|reliability)|\b(design|verification|power|clock|rtl|physical|silicon|chip|dft|ip|test)[^,]*\bsoc\b/],
-  ['hardware-electronics', /hardware|fpga|asic|vlsi|embedded|firmware|\bsilicon\b|electronics|\bpcb\b|\brfic\b|antenna|physical design|\brf\b|board design|validation engineer|verification engineer|\bdft\b|\bmems\b|חומרה|אלקטרוניקה|מהנדס\/?\.?ת? מערכ|אינטגרציה|שילובים|תקשורת|ניווט/],
+  ['hardware-electronics', /\belectrical engineer\b|hardware|fpga|asic|vlsi|embedded|firmware|\bsilicon\b|electronics|\bpcb\b|\brfic\b|antenna|physical design|\brf\b|board design|validation engineer|verification engineer|\bdft\b|\bmems\b|חומרה|אלקטרוניקה|מהנדס\/?\.?ת? מערכ|אינטגרציה|שילובים|תקשורת|ניווט/],
   ['mechanical-manufacturing', /mechanical|mechatronics|manufacturing|production (engineer|manager|operator|worker|line)|machinist|technician|maintenance|\bcnc\b|welder|electrician|industrial engineer|process engineer|quality (engineer|technician|inspector|systems|manager)|מכונות|מכאנ|מכונאי|טכנאי|תכן|מכני|מתקין|יצור|טכנולוג(\.?ית)?(?![א-ת])|technologist|אחזקה|ייצור|תעשייה וניהול|מהנדס\/?\.?ת? תעשייה|חשמלאי|רתך|מסגר|איכות|הנדסאי|מכטרוניקה|בקרת הינע/],
   ['finance', /financ|controller|accountant|accounting|bookkeep|payroll|\bcfo\b|fp&a|auditor|treasury|\beconomist\b|כספים|הנהלת חשבונות|הנה"ח|רואה חשבון|רו"ח|חשב\/?\.?ת?|כלכלה|כלכלן|פיננס/],
   ['operations-logistics', /operations|supply chain|logistics|warehouse|procurement|inventory|shipping|fleet|facilities|\bdriver\b|order management|לוגיסטיק|רכש|קניין|מחסנא|מחסן|אחסנה|הפצה|הובלה|שרשרת אספקה|תפעול|מלאי|מלגז|נהג/],

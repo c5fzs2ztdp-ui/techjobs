@@ -43,6 +43,11 @@ export default function Jobs() {
     }
     if (initialCity) {
       setFilters(prev => ({ ...prev, cities: [initialCity] }));
+    } else {
+      // The city filter follows the URL: navigating from /jobs?city=X back
+      // to plain /jobs must drop it, or the list stays filtered with no URL
+      // state explaining why.
+      setFilters(prev => (prev.cities.length > 0 ? { ...prev, cities: [] } : prev));
     }
   }, [initialCategoryParam, initialCity]);
   const [isFilterOpen, setIsFilterOpen] = useState(false);
@@ -409,7 +414,7 @@ export default function Jobs() {
                     <Button
                       variant="outline"
                       size="sm"
-                      onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                      onClick={() => setCurrentPage(Math.max(1, activePage - 1))}
                       disabled={activePage === 1}
                       aria-label="Previous page" 
                       className="px-2 sm:px-3"
@@ -436,7 +441,7 @@ export default function Jobs() {
                     <Button
                       variant="outline"
                       size="sm"
-                      onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                      onClick={() => setCurrentPage(Math.min(totalPages, activePage + 1))}
                       disabled={activePage === totalPages}
                       aria-label="Next page" 
                       className="px-2 sm:px-3"

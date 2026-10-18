@@ -118,6 +118,24 @@ const OPTIONAL_STRING_FIELDS = [
 // the boundary rather than at every render site.
 const BIDI_CONTROLS = /[\u200E\u200F\u202A-\u202E\u2066-\u2069]/g;
 
+// Enum and dictionary-key fields feed renderer lookups (workModelIcons,
+// CATEGORY_LABELS, REGION_LABELS, cityLabels): a value like '__proto__'
+// passes string-only validation but resolves through Object.prototype and
+// crashes React when rendered. Restrict them to supported values here, at
+// the boundary, so a malformed row degrades instead of taking down the page.
+const EMPLOYMENT_TYPES = new Set(['full-time', 'part-time', 'student', 'intern', 'temp', 'contract']);
+const WORK_MODELS = new Set(['remote', 'hybrid', 'on-site']);
+const SENIORITIES = new Set(['intern', 'junior', 'senior', 'staff', 'principal', 'lead', 'manager']);
+const KNOWN_CATEGORIES = new Set(Object.keys(CATEGORY_LABELS));
+
+// A key that resolves through Object.prototype ('__proto__', 'toString',
+// 'constructor', ...) poisons dictionary lookups at render time; real data
+// never contains one. Unknown-but-ordinary values are harmless there (the
+// lookups have fallbacks), so only inherited-property keys are rejected.
+function isSafeLookupKey(value: string): boolean {
+  return !(value in Object.prototype);
+}
+
 function cleanString(value: string): string {
   return value.replace(BIDI_CONTROLS, '');
 }
@@ -168,8 +186,17 @@ export function parseJobsPayload(raw: unknown): JobsPayload {
       rec[f] = typeof v === 'string' && v !== '' ? cleanString(v) : null;
     }
     rec.technologies = stringArray(rec.technologies);
-    rec.cities = stringArray(rec.cities);
-    rec.regions = stringArray(rec.regions);
+    // Dictionary lookups (cityLabels, REGION_LABELS) must never resolve an
+    // inherited property, so drop prototype-polluting city/region values.
+    rec.cities = stringArray(rec.cities).filter(isSafeLookupKey);
+    rec.regions = stringArray(rec.regions).filter(isSafeLookupKey);
+    if (rec.region !== null && !isSafeLookupKey(rec.region as string)) rec.region = null;
+    if (rec.employmentType !== null && !EMPLOYMENT_TYPES.has(rec.employmentType as string)) rec.employmentType = null;
+    if (rec.workModel !== null && !WORK_MODELS.has(rec.workModel as string)) rec.workModel = null;
+    if (rec.seniority !== null && !SENIORITIES.has(rec.seniority as string)) rec.seniority = null;
+    // An unknown category stays visible under 'other' instead of crashing
+    // the card's CATEGORY_LABELS lookup.
+    if (!KNOWN_CATEGORIES.has(rec.job_category as string)) rec.job_category = 'other';
     jobs.push(rec as unknown as Job);
   }
   if (dropped > 0) {

@@ -332,6 +332,54 @@ function stripSyncMeta(job: SavedJob): Omit<SavedJob, 'lastUploaded'> {
   return rest;
 }
 
+// A compensating DELETE that fails (5xx/network) must not be forgotten: the
+// local record is already gone, so without a retry the account row would
+// resurrect the deleted save on the next sync. Failed ids persist here and
+// reconciliation retries them until the server confirms the row is absent.
+const PENDING_DELETES_KEY = 'techjobs_pending_saved_job_deletes';
+
+function getPendingDeletes(): string[] {
+  try {
+    const raw = localStorage.getItem(PENDING_DELETES_KEY);
+    const parsed: unknown = raw ? JSON.parse(raw) : [];
+    return Array.isArray(parsed) ? parsed.filter((x): x is string => typeof x === 'string') : [];
+  } catch {
+    return [];
+  }
+}
+
+function setPendingDeletes(ids: string[]): void {
+  if (ids.length === 0) {
+    localStorage.removeItem(PENDING_DELETES_KEY);
+  } else {
+    localStorage.setItem(PENDING_DELETES_KEY, JSON.stringify(ids));
+  }
+}
+
+function rememberPendingDelete(id: string): void {
+  const ids = getPendingDeletes();
+  if (!ids.includes(id)) setPendingDeletes([...ids, id]);
+}
+
+async function flushPendingDeletes(): Promise<void> {
+  const ids = getPendingDeletes();
+  if (ids.length === 0) return;
+  const remaining: string[] = [];
+  for (const id of ids) {
+    try {
+      const response = await fetch(`${API_BASE_URL}/saved-jobs/${id}`, {
+        method: 'DELETE',
+        credentials: 'include',
+      });
+      // 2xx or 404: the row is gone either way - stop retrying it.
+      if (!response.ok && response.status !== 404) remaining.push(id);
+    } catch {
+      remaining.push(id);
+    }
+  }
+  setPendingDeletes(remaining);
+}
+
 // Login, the Saved Jobs page and the Retry sync action can all trigger a
 // reconciliation at the same time. Two overlapping runs interleave their
 // localStorage reads/writes; sharing one in-flight run keeps them convergent.
@@ -345,7 +393,35 @@ export function reconcileGuestSavedJobs(): Promise<number> {
   return reconcileInFlight;
 }
 
+// reconcileInFlight coordinates only callers in this JavaScript context,
+// while localStorage is shared across tabs: without a cross-tab lock, tab B
+// can reconcile while tab A's upload response is still in flight, remove the
+// shared local record after a 409, and A then mistakes that cleanup for a
+// user deletion and deletes the synced account row. The Web Locks API
+// serializes reconciliation across tabs, so a missing local record during an
+// in-flight upload can only be a real user deletion. Browsers without the
+// API fall back to same-context coordination only.
+const RECONCILE_LOCK_NAME = 'techjobs-saved-jobs-reconcile';
+
+interface LockManagerLike {
+  request<T>(name: string, callback: () => Promise<T>): Promise<T>;
+}
+
 async function doReconcileGuestSavedJobs(): Promise<number> {
+  const lockManager =
+    typeof navigator !== 'undefined'
+      ? (navigator as Navigator & { locks?: LockManagerLike }).locks
+      : undefined;
+  if (lockManager) {
+    return lockManager.request(RECONCILE_LOCK_NAME, runReconcileGuestSavedJobs);
+  }
+  return runReconcileGuestSavedJobs();
+}
+
+async function runReconcileGuestSavedJobs(): Promise<number> {
+  // Retry account-row deletions that failed on earlier runs first; they are
+  // independent of the local queue and must survive it being empty.
+  await flushPendingDeletes();
   const local = getLocalJobs();
   if (local.length === 0) return 0;
   const remaining: SavedJob[] = [];
@@ -402,10 +478,20 @@ async function doReconcileGuestSavedJobs(): Promise<number> {
         if (response.ok) {
           const created: SavedJob | null = await response.json().catch(() => null);
           if (created?.id) {
-            await fetch(`${API_BASE_URL}/saved-jobs/${created.id}`, {
-              method: 'DELETE',
-              credentials: 'include',
-            }).catch(() => {});
+            // If this compensating delete fails, the local record is already
+            // gone and nothing would retry it - persist the id so the next
+            // reconciliation removes the orphaned account row.
+            try {
+              const deleteResponse = await fetch(`${API_BASE_URL}/saved-jobs/${created.id}`, {
+                method: 'DELETE',
+                credentials: 'include',
+              });
+              if (!deleteResponse.ok && deleteResponse.status !== 404) {
+                rememberPendingDelete(created.id);
+              }
+            } catch {
+              rememberPendingDelete(created.id);
+            }
           }
         }
         continue;

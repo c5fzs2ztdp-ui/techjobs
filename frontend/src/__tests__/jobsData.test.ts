@@ -22,6 +22,31 @@ describe('fetchJobsPayload normalization', () => {
     expect(payload.jobs[1].cities).toEqual([]);
   });
 
+  it('neutralizes prototype-polluting values in renderer lookup keys', async () => {
+    // '__proto__' passes string validation but resolves through
+    // Object.prototype in workModelIcons / CATEGORY_LABELS / cityLabels
+    // lookups and crashes React. The boundary must coerce it away.
+    vi.stubGlobal('fetch', vi.fn(async () => payloadResponse({
+      schemaVersion: 1,
+      cityLabels: { 'Tel Aviv': 'תל אביב' },
+      jobs: [{
+        company: 'A', title: 'Engineer', url: 'https://x/1',
+        job_category: '__proto__', workModel: '__proto__', seniority: '__proto__',
+        employmentType: 'full-time', region: '__proto__',
+        cities: ['__proto__', 'Tel Aviv'], regions: ['__proto__', 'center'], technologies: [],
+      }],
+    })));
+    const payload = await fetchJobsPayload();
+    const job = payload.jobs[0];
+    expect(job.job_category).toBe('other');
+    expect(job.workModel).toBeNull();
+    expect(job.seniority).toBeNull();
+    expect(job.employmentType).toBe('full-time');
+    expect(job.region).toBeNull();
+    expect(job.cities).toEqual(['Tel Aviv']);
+    expect(job.regions).toEqual(['center']);
+  });
+
   it('rejects a structurally incompatible payload instead of an empty board', async () => {
     vi.stubGlobal('fetch', vi.fn(async () => payloadResponse({})));
     await expect(fetchAllJobs()).rejects.toThrow('missing jobs array');

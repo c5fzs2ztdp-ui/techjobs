@@ -36,11 +36,24 @@ const PAGE_TITLES: [RegExp, string][] = [
 ];
 
 function PageTitle() {
-  const { pathname } = useLocation();
+  const { pathname, search } = useLocation();
   useEffect(() => {
     const match = PAGE_TITLES.find(([re]) => re.test(pathname));
     document.title = match ? match[1] : 'Page Not Found - TechJobsIL';
-  }, [pathname]);
+    // index.html declares the homepage canonical, but the SPA serves
+    // distinct pages at /jobs, /companies, /company, etc. Point the
+    // canonical at the current route (keeping the company identifier) so
+    // search engines don't collapse every page into "/".
+    const canonical = document.querySelector<HTMLLinkElement>('link[rel="canonical"]');
+    if (canonical) {
+      const company = pathname.startsWith('/company')
+        ? new URLSearchParams(search).get('name')
+        : null;
+      canonical.href =
+        'https://techjobsil.com' + (pathname === '/' ? '/' : pathname) +
+        (company ? `?name=${encodeURIComponent(company)}` : '');
+    }
+  }, [pathname, search]);
   return null;
 }
 
