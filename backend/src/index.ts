@@ -1,6 +1,7 @@
 import 'dotenv/config';
 import express from 'express';
 import cors from 'cors';
+import helmet from 'helmet';
 import session from 'express-session';
 import pgSession from 'connect-pg-simple';
 import { Pool } from 'pg';
@@ -38,6 +39,11 @@ app.use(cors({
 }));
 
 // Body parser
+// Baseline security headers on every response (API + static). CSP stays off:
+// a correct policy needs an audit of third-party assets (fonts, tiles,
+// analytics) and is a separate change.
+app.use(helmet({ contentSecurityPolicy: false }));
+
 app.use(express.json());
 
 // PostgreSQL session store using Supabase

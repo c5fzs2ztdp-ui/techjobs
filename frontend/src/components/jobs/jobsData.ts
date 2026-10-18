@@ -143,12 +143,18 @@ export function parseJobsPayload(raw: unknown): JobsPayload {
   const jobs: Job[] = [];
   let dropped = 0;
   for (const record of envelope.jobs) {
+    // A job url becomes a rendered href: anything but http(s) (e.g. a
+    // javascript: URL smuggled into the feed) would be an XSS link, so a
+    // bad-scheme record is dropped like any other malformed row.
+    const url = (record as Record<string, unknown>)?.url;
     const valid =
       record !== null &&
       typeof record === 'object' &&
       REQUIRED_JOB_STRING_FIELDS.every(
         (f) => typeof (record as Record<string, unknown>)[f] === 'string',
-      );
+      ) &&
+      typeof url === 'string' &&
+      /^https?:\/\//i.test(url);
     if (!valid) {
       dropped += 1;
       continue;

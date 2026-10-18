@@ -269,7 +269,8 @@ const jobs = sourceRows.map(j => {
     company: strOrNull(j.company),
     title: strOrNull(j.title),
     location: strOrNull(j.location),
-    url: strOrNull(j.url),
+    // Only http(s) urls: anything else renders as a dangerous href.
+    url: typeof j.url === 'string' && /^https?:\/\//i.test(j.url) ? j.url.replace(BIDI, '') : null,
     city,
     department: strOrNull(j.department),
     description: strOrNull(j.description),
