@@ -949,6 +949,43 @@ describe('account scoping and edit retention', () => {
     expect(listed.find((j: { id: string }) => j.id === 'srv-1')).toBeUndefined();
   });
 
+  it('binds a user-initiated delete to the resolved account and queues the retry on a mismatch', async () => {
+    let seenHeader: string | null = null;
+    server.use(
+      http.delete('/api/saved-jobs/srv-2', ({ request }) => {
+        seenHeader = request.headers.get('X-Expected-User-Id');
+        return HttpResponse.json({ error: 'Account changed mid-request', code: 'ACCOUNT_MISMATCH' }, { status: 409 });
+      })
+    );
+
+    const removed = await savedJobsApi.delete('srv-2', 'http://example.com/s2');
+
+    expect(seenHeader).toBe('user-123');
+    expect(removed).toBe(true);
+    const queued = JSON.parse(localStorage.getItem('techjobs_pending_saved_job_deletes') || '{}');
+    expect(queued['user-123']).toEqual(['srv-2']);
+  });
+
+  it('sends no expected-account header for a guest delete', async () => {
+    let seenHeader: string | null = 'unset';
+    server.use(
+      http.get('/api/auth/me', () => HttpResponse.json({ authenticated: false, user: null })),
+      http.delete('/api/saved-jobs/local-1', ({ request }) => {
+        seenHeader = request.headers.get('X-Expected-User-Id');
+        return new HttpResponse(null, { status: 401 });
+      })
+    );
+    localStorage.setItem('techjobs_saved_jobs', JSON.stringify([
+      { id: 'local-1', job_title: 'G', company: 'C', url: 'http://example.com/g', created_date: '2026-10-09T00:00:00.000Z' },
+    ]));
+
+    const removed = await savedJobsApi.delete('local-1');
+
+    expect(seenHeader).toBeNull();
+    expect(removed).toBe(true);
+    expect(JSON.parse(localStorage.getItem('techjobs_saved_jobs') || '[]')).toHaveLength(0);
+  });
+
   it('reports failure for a failed server-row delete when the account cannot be resolved', async () => {
     server.use(
       http.get('/api/auth/me', () => HttpResponse.error()),
