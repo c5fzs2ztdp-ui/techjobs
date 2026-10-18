@@ -640,3 +640,46 @@ describe('reconcileGuestSavedJobs - reviewer regressions', () => {
     expect(jobs[0]).toMatchObject({ id: 'server-1', pending: true });
   });
 });
+
+describe('reconcileGuestSavedJobs - concurrency', () => {
+  beforeEach(() => {
+    localStorage.clear();
+  });
+
+  it('overlapping calls share one in-flight run instead of racing', async () => {
+    let posts = 0;
+    let resolvePost: (() => void) | null = null;
+    server.use(
+      http.post('/api/saved-jobs', async () => {
+        posts += 1;
+        if (posts === 1) {
+          await new Promise<void>((resolve) => { resolvePost = resolve; });
+        }
+        return HttpResponse.json({ id: `server-${posts}` }, { status: 201 });
+      })
+    );
+    localStorage.setItem('techjobs_saved_jobs', JSON.stringify([{
+      id: 'local-1', job_title: 'Guest Job', company: 'Guest Corp', url: 'http://example.com/job-1',
+      applied: false, applied_date: null, comments: '', created_date: '2026-10-09T00:00:00.000Z',
+    }]));
+
+    const first = reconcileGuestSavedJobs();
+    const second = reconcileGuestSavedJobs(); // login + page mount overlap
+    await new Promise((r) => setTimeout(r, 20));
+    resolvePost!();
+    const [a, b] = await Promise.all([first, second]);
+
+    expect(posts).toBe(1);
+    expect(a).toBe(b);
+    expect(localStorage.getItem('techjobs_saved_jobs')).toBeNull();
+
+    // after the shared run settles, a later call runs a fresh pass
+    localStorage.setItem('techjobs_saved_jobs', JSON.stringify([{
+      id: 'local-2', job_title: 'Guest Job 2', company: 'Guest Corp', url: 'http://example.com/job-2',
+      applied: false, applied_date: null, comments: '', created_date: '2026-10-09T00:00:00.000Z',
+    }]));
+    await reconcileGuestSavedJobs();
+    expect(posts).toBe(2);
+    expect(localStorage.getItem('techjobs_saved_jobs')).toBeNull();
+  });
+});
