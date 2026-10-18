@@ -296,6 +296,71 @@ describe('Saved Jobs Routes', () => {
     });
   });
 
+  describe('X-Expected-User-Id guard', () => {
+    const jobData = {
+      job_title: 'Guarded Job',
+      company: 'Guard Corp',
+      url: 'http://example.com/guarded',
+    };
+
+    it('creates the row when the expected account matches the session', async () => {
+      await createAuthenticatedRequest(testUser)
+        .post('/api/saved-jobs')
+        .set('X-Expected-User-Id', testUser.id)
+        .send(jobData)
+        .expect(201);
+    });
+
+    it('rejects a write before the database when the session account differs', async () => {
+      const response = await createAuthenticatedRequest(testUser2)
+        .post('/api/saved-jobs')
+        .set('X-Expected-User-Id', testUser.id)
+        .send(jobData)
+        .expect(409);
+
+      expect(response.body.code).toBe('ACCOUNT_MISMATCH');
+      const list = await createAuthenticatedRequest(testUser2).get('/api/saved-jobs').expect(200);
+      expect(list.body).toHaveLength(0);
+    });
+
+    it('rejects a delete for a different expected account and keeps the row', async () => {
+      const now = new Date().toISOString();
+      await insertSavedJob({
+        id: 'guarded-delete-id',
+        user_id: testUser.id,
+        ...jobData,
+        created_date: now,
+        updated_date: now,
+      });
+
+      const response = await createAuthenticatedRequest(testUser2)
+        .delete('/api/saved-jobs/guarded-delete-id')
+        .set('X-Expected-User-Id', testUser.id)
+        .expect(409);
+
+      expect(response.body.code).toBe('ACCOUNT_MISMATCH');
+      expect(await getSavedJobById('guarded-delete-id')).toBeDefined();
+    });
+
+    it('deletes the row when the expected account matches', async () => {
+      const now = new Date().toISOString();
+      await insertSavedJob({
+        id: 'guarded-delete-ok',
+        user_id: testUser.id,
+        ...jobData,
+        created_date: now,
+        updated_date: now,
+      });
+
+      await createAuthenticatedRequest(testUser)
+        .delete('/api/saved-jobs/guarded-delete-ok')
+        .set('X-Expected-User-Id', testUser.id)
+        .expect(204);
+
+      expect(await getSavedJobById('guarded-delete-ok')).toBeFalsy();
+    });
+  });
+
   describe('GET /api/saved-jobs/:id', () => {
     it('should return saved job by ID', async () => {
       const now = new Date().toISOString();
