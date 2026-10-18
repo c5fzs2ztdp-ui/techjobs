@@ -37,7 +37,7 @@ export default function CompanyProfile() {
     mutationFn: async (job: Job) => {
       const existing = savedJobs.find(s => s.url === job.url);
       if (existing) {
-        await savedJobsApi.delete(existing.id);
+        await savedJobsApi.delete(existing.id, existing.url);
         return { action: 'removed' };
       } else {
         await savedJobsApi.create({

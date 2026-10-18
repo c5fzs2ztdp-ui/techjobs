@@ -178,7 +178,11 @@ export const savedJobsApi = {
     }
   },
 
-  update: async (id: string, data: Partial<SavedJob>): Promise<SavedJob | null> => {
+  // url lets a successful server-side update also sync a retained local
+  // duplicate: the local copy takes the new values and is stamped
+  // lastUploaded, so the next reconciliation does not treat it as a dirty
+  // edit and overwrite the newer account state.
+  update: async (id: string, data: Partial<SavedJob>, url?: string): Promise<SavedJob | null> => {
       try {
         const response = await fetch(`${API_BASE_URL}/saved-jobs/${id}`, {
           method: 'PUT',
@@ -198,6 +202,19 @@ export const savedJobsApi = {
       }
       
         if (!response.ok) throw new Error('Failed to update');
+        if (url) {
+          const jobs = getLocalJobs();
+          const index = jobs.findIndex((j) => j.url === url);
+          if (index !== -1) {
+            const merged = { ...jobs[index], ...data };
+            const last = { ...(jobs[index].lastUploaded ?? {}) };
+            for (const f of ['applied', 'applied_date', 'comments'] as const) {
+              if (f in data) last[f] = data[f] as never;
+            }
+            jobs[index] = { ...merged, lastUploaded: last };
+            setLocalJobs(jobs);
+          }
+        }
         return await response.json();
       } catch (error) {
         console.error('Backend error, falling back to localStorage:', error);
@@ -210,7 +227,11 @@ export const savedJobsApi = {
     }
   },
 
-  delete: async (id: string): Promise<boolean> => {
+  // url lets a successful server-side delete also retire a retained local
+  // duplicate of the same job (a failed conflict merge or a pre-upload
+  // edit); without it the local copy would resurrect the save on the next
+  // reconciliation.
+  delete: async (id: string, url?: string): Promise<boolean> => {
       try {
         const response = await fetch(`${API_BASE_URL}/saved-jobs/${id}`, {
         method: 'DELETE',
@@ -227,6 +248,11 @@ export const savedJobsApi = {
       }
       
         if (!response.ok && response.status !== 404) throw new Error('Failed to delete');
+        if (response.ok && url) {
+          const jobs = getLocalJobs();
+          const filtered = jobs.filter((j) => j.url !== url);
+          if (filtered.length < jobs.length) setLocalJobs(filtered);
+        }
         if (response.status === 404) {
           // Unknown to the server: remove a pending local record if it is one.
           const jobs = getLocalJobs();
