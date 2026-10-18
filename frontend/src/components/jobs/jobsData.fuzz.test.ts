@@ -68,16 +68,16 @@ describe('parseJobsPayload fuzz', () => {
       catch (e) { throw new Error(`batch ${batch} threw: ${(e as Error).message}`); }
       expect(({} as Record<string, unknown>).polluted).toBe(before);
       for (const j of p.jobs) {
-        for (const f of REQ) expect(typeof (j as Record<string, unknown>)[f]).toBe('string');
+        for (const f of REQ) expect(typeof (j as unknown as Record<string, unknown>)[f]).toBe('string');
         for (const f of OPT) {
-          const v = (j as Record<string, unknown>)[f];
+          const v = (j as unknown as Record<string, unknown>)[f];
           expect(v === null || typeof v === 'string').toBe(true);
         }
         for (const arr of [j.technologies, j.cities, j.regions]) {
           expect(Array.isArray(arr)).toBe(true);
           for (const el of arr) expect(typeof el).toBe('string');
         }
-        const all = [...REQ, ...OPT].map(f => (j as Record<string, unknown>)[f]).filter(v => typeof v === 'string') as string[];
+        const all = [...REQ, ...OPT].map(f => (j as unknown as Record<string, unknown>)[f]).filter(v => typeof v === 'string') as string[];
         all.push(...j.technologies, ...j.cities, ...j.regions);
         for (const s of all) expect(s).not.toMatch(/[\u200E\u200F\u202A-\u202E\u2066-\u2069]/);
       }

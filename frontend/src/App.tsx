@@ -1,3 +1,4 @@
+import { lazy, Suspense } from 'react';
 import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import ErrorBoundary from '@/components/ErrorBoundary';
@@ -8,14 +9,18 @@ import Layout from '@/components/Layout';
 import AccessibilityWidget from '@/components/AccessibilityWidget';
 import Home from '@/pages/Home';
 import Jobs from '@/pages/Jobs';
-import Companies from '@/pages/Companies';
-import CompanyProfile from '@/pages/CompanyProfile';
-import SavedJobs from '@/pages/SavedJobs';
-import Map from '@/pages/Map';
-import PrivacyPolicy from '@/pages/PrivacyPolicy';
-import TermsOfService from '@/pages/TermsOfService';
-import AccessibilityStatement from '@/pages/AccessibilityStatement';
-import NotFound from "./pages/NotFound";
+
+// Route-level code splitting: every page except the two landing routes
+// (Home, Jobs) loads on demand, so first paint no longer downloads Leaflet
+// and the other secondary-route code.
+const Companies = lazy(() => import('@/pages/Companies'));
+const CompanyProfile = lazy(() => import('@/pages/CompanyProfile'));
+const SavedJobs = lazy(() => import('@/pages/SavedJobs'));
+const Map = lazy(() => import('@/pages/Map'));
+const PrivacyPolicy = lazy(() => import('@/pages/PrivacyPolicy'));
+const TermsOfService = lazy(() => import('@/pages/TermsOfService'));
+const AccessibilityStatement = lazy(() => import('@/pages/AccessibilityStatement'));
+const NotFound = lazy(() => import('@/pages/NotFound'));
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -32,6 +37,7 @@ function App() {
       <Router>
         <AuthErrorToast />
         <ErrorBoundary>
+        <Suspense fallback={<div className="min-h-[60vh] flex items-center justify-center text-warm-500">Loading...</div>}>
         <Routes>
           <Route
             path="/"
@@ -114,6 +120,7 @@ function App() {
             }
           />
         </Routes>
+        </Suspense>
         </ErrorBoundary>
         <AccessibilityWidget />
       </Router>
