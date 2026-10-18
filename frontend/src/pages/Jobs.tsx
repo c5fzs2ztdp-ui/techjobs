@@ -321,7 +321,7 @@ export default function Jobs() {
                 Updated daily from leading startups and enterprises.
               </p>
             </div>
-            <Button asChild className="bg-copper-500 text-white hover:bg-copper-600 border-none shadow-lg w-full md:w-auto">
+            <Button asChild className="bg-copper-700 text-white hover:bg-copper-800 border-none shadow-lg w-full md:w-auto">
               <Link to={createPageUrl("Companies")}>
                 <Building2 className="w-4 h-4 mr-2" />
                 Browse Companies

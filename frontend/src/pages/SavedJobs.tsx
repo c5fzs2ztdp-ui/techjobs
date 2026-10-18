@@ -141,8 +141,8 @@ export default function SavedJobs() {
         <div className="max-w-4xl mx-auto px-4 py-6">
           <div className="flex items-center gap-4 mb-4">
             <Button asChild variant="ghost" size="icon">
-              <Link to={createPageUrl("Jobs")}>
-                <ArrowLeft className="w-5 h-5" />
+              <Link to={createPageUrl("Jobs")} aria-label="Back to jobs">
+                <ArrowLeft className="w-5 h-5" aria-hidden="true" />
               </Link>
             </Button>
             <div className="flex items-center gap-3">

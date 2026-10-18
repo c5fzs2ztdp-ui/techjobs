@@ -90,7 +90,7 @@ export default function JobCard({ job, onSave, isSaved, onApply, isApplied, inde
                       {CATEGORY_LABELS[job.job_category] || job.job_category.replace(/-/g, ' ')}
                     </Badge>
                     {job.employmentType && (
-                      <Badge variant="outline" className="bg-copper-500/10 text-copper-600 border-copper-400/40 text-xs capitalize">
+                      <Badge variant="outline" className="bg-copper-500/10 text-copper-700 border-copper-400/40 text-xs capitalize">
                         {job.employmentType.replace(/-/g, ' ')}
                       </Badge>
                     )}
@@ -121,7 +121,7 @@ export default function JobCard({ job, onSave, isSaved, onApply, isApplied, inde
               <div className="flex flex-wrap items-center gap-4 text-sm text-warm-500">
                 {city && (
                   <div className="flex items-center gap-1.5">
-                    <MapPin className="w-4 h-4 text-warm-400" aria-hidden="true" />
+                    <MapPin className="w-4 h-4 text-warm-500" aria-hidden="true" />
                     <span aria-label={`Location: ${city}`}>
                       {city}{job.cities.length > 1 && ` +${job.cities.length - 1}`}
                     </span>
@@ -129,7 +129,7 @@ export default function JobCard({ job, onSave, isSaved, onApply, isApplied, inde
                 )}
                 {job.workModel && WorkModelIcon && (
                   <div className="flex items-center gap-1.5">
-                    <WorkModelIcon className="w-4 h-4 text-warm-400" aria-hidden="true" />
+                    <WorkModelIcon className="w-4 h-4 text-warm-500" aria-hidden="true" />
                     <span className="capitalize" aria-label={`Work model: ${job.workModel}`}>{job.workModel.replace(/-/g, ' ')}</span>
                   </div>
                 )}
@@ -146,7 +146,7 @@ export default function JobCard({ job, onSave, isSaved, onApply, isApplied, inde
                     </span>
                   ))}
                   {job.technologies.length > MAX_TECH_CHIPS && (
-                    <span className="text-xs text-warm-400">+{job.technologies.length - MAX_TECH_CHIPS} more</span>
+                    <span className="text-xs text-warm-500">+{job.technologies.length - MAX_TECH_CHIPS} more</span>
                   )}
                 </div>
               )}
@@ -159,7 +159,7 @@ export default function JobCard({ job, onSave, isSaved, onApply, isApplied, inde
                 onClick={() => onSave(job)}
                 aria-label={isSaved ? `Remove ${job.title} from saved jobs` : `Save ${job.title}`}
                 aria-pressed={isSaved}
-                className={`rounded-full ${isSaved ? 'text-iris-600 bg-iris-50' : 'text-warm-400 hover:text-iris-600'}`}
+                className={`rounded-full ${isSaved ? 'text-iris-600 bg-iris-50' : 'text-warm-500 hover:text-iris-600'}`}
               >
                 {isSaved ? <BookmarkCheck className="w-5 h-5" aria-hidden="true" /> : <Bookmark className="w-5 h-5" aria-hidden="true" />}
               </Button>
@@ -170,7 +170,7 @@ export default function JobCard({ job, onSave, isSaved, onApply, isApplied, inde
                   onClick={() => onApply(job)}
                   aria-label={isApplied ? `Unmark ${job.title} as applied` : `Mark ${job.title} as applied`}
                   aria-pressed={isApplied}
-                  className={`rounded-full ${isApplied ? 'text-emerald-600 bg-emerald-50' : 'text-warm-400 hover:text-emerald-600'}`}
+                  className={`rounded-full ${isApplied ? 'text-emerald-600 bg-emerald-50' : 'text-warm-500 hover:text-emerald-600'}`}
                 >
                   <CheckCircle2 className="w-5 h-5" aria-hidden="true" />
                 </Button>
@@ -180,7 +180,7 @@ export default function JobCard({ job, onSave, isSaved, onApply, isApplied, inde
 
           <div className="mt-4 pt-4 border-t border-warm-100 flex justify-between items-center">
             {job.updated ? (
-              <time className="text-xs text-warm-400" dateTime={job.updated}>
+              <time className="text-xs text-warm-500" dateTime={job.updated}>
                 {job.postedAt ? 'Posted' : 'Updated'}: {new Date(job.updated).toLocaleDateString('en-US')}
               </time>
             ) : <span />}
@@ -188,14 +188,14 @@ export default function JobCard({ job, onSave, isSaved, onApply, isApplied, inde
               <Button
                 asChild
                 size="sm"
-                className="bg-copper-500 hover:bg-copper-600 text-white gap-2 rounded-lg"
+                className="bg-copper-700 hover:bg-copper-800 text-white gap-2 rounded-lg"
                 onClick={handleApplyClick}
               >
                 <a
                   href={job.url}
                   target="_blank"
                   rel="noopener noreferrer"
-                  aria-label={`Apply to ${job.title} at ${job.company} (opens in new window)`}
+                  aria-label={`Apply Now to ${job.title} at ${job.company} (opens in new window)`}
                 >
                   Apply Now
                   <ExternalLink className="w-4 h-4" aria-hidden="true" />

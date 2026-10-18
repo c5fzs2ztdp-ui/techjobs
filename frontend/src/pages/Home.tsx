@@ -113,7 +113,7 @@ export default function Home() {
               <Button
                 asChild
                 size="lg"
-                className="bg-copper-500 text-white hover:bg-copper-600 text-lg px-8 py-6 rounded-xl shadow-xl shadow-black/20"
+                className="bg-copper-700 text-white hover:bg-copper-800 text-lg px-8 py-6 rounded-xl shadow-xl shadow-black/20"
               >
                 <Link to={createPageUrl("Jobs")}>
                   <Search className="w-5 h-5 mr-2" />
@@ -220,7 +220,7 @@ export default function Home() {
           <Button
             asChild
             size="lg"
-            className="bg-copper-500 hover:bg-copper-600 text-lg px-8 py-6 rounded-xl"
+            className="bg-copper-700 hover:bg-copper-800 text-lg px-8 py-6 rounded-xl"
           >
             <Link to={createPageUrl("Jobs")}>
               Start Searching Now
@@ -234,10 +234,10 @@ export default function Home() {
       <footer className="bg-warm-900 py-8">
         <div className="max-w-7xl mx-auto px-4 text-center space-y-4">
           <Button
-            variant="outline"
+            variant="ghost"
             size="sm"
             onClick={() => setShowAddCompany(true)}
-            className="border-warm-700 text-warm-300 hover:text-white hover:bg-warm-800 gap-2"
+            className="border border-warm-700 text-warm-300 hover:text-white hover:bg-warm-800 gap-2"
             aria-label="Add your company to TechJobsIL"
           >
             <Plus className="w-4 h-4" aria-hidden="true" />
@@ -262,7 +262,7 @@ export default function Home() {
             </Button>
           </nav>
 
-          <p className="text-warm-500 text-xs">
+          <p className="text-warm-400 text-xs">
             © {new Date().getFullYear()} TechJobsIL. All rights reserved.
           </p>
         </div>
