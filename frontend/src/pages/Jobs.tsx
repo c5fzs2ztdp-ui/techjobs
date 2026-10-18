@@ -362,6 +362,7 @@ export default function Jobs() {
             onFilterClick={() => setIsFilterOpen(true)}
             totalJobs={filteredJobs.length}
             activeFiltersCount={activeFiltersCount}
+            isLoading={isLoading}
           />
 
           <div className="flex-1 overflow-y-auto p-4">
