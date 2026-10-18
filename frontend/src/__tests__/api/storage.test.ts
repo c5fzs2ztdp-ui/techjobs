@@ -778,6 +778,35 @@ describe('account scoping and edit retention', () => {
     ]);
   });
 
+  it('the 401 fallback shows only unclaimed guest records', async () => {
+    server.use(
+      http.get('/api/saved-jobs', () => new HttpResponse(null, { status: 401 }))
+    );
+    localStorage.setItem('techjobs_saved_jobs', JSON.stringify([
+      { id: 'l1', job_title: 'Guest Save', company: 'C', url: 'http://example.com/guest', created_date: '2026-10-09T00:00:00.000Z' },
+      { id: 'l3', job_title: 'Other Account Save', company: 'C', url: 'http://example.com/other', comments: 'private note', created_date: '2026-10-09T00:00:00.000Z', syncedTo: 'other-user' },
+    ]));
+
+    const jobs = await savedJobsApi.list();
+
+    expect(jobs.map((j) => j.url)).toEqual(['http://example.com/guest']);
+  });
+
+  it('the error fallback scopes records to the resolved account', async () => {
+    server.use(
+      http.get('/api/saved-jobs', () => HttpResponse.error())
+    );
+    localStorage.setItem('techjobs_saved_jobs', JSON.stringify([
+      { id: 'l1', job_title: 'Guest Save', company: 'C', url: 'http://example.com/guest', created_date: '2026-10-09T00:00:00.000Z' },
+      { id: 'l2', job_title: 'Mine Synced', company: 'C', url: 'http://example.com/mine', created_date: '2026-10-09T00:00:00.000Z', syncedTo: 'user-123' },
+      { id: 'l3', job_title: 'Other Account Save', company: 'C', url: 'http://example.com/other', created_date: '2026-10-09T00:00:00.000Z', syncedTo: 'other-user' },
+    ]));
+
+    const jobs = await savedJobsApi.list(); // auth/me resolves user-123
+
+    expect(jobs.map((j) => j.url).sort()).toEqual(['http://example.com/guest', 'http://example.com/mine']);
+  });
+
   it('does not touch pending deletions owned by another account', async () => {
     // A 404 (or any result) under the current account must not clear a
     // pending deletion that belongs to a different account's row.
