@@ -238,3 +238,18 @@ test('engineering designers fall through to hardware/mechanical', () => {
   assert.equal(deriveJobCategory('Senior Product Designer', null), 'design');
   assert.equal(deriveJobCategory('Senior Game Designer', null), 'design');
 });
+
+// Explicit hardware/mechanical test roles stay out of software QA.
+test('mechanical test engineer -> mechanical-manufacturing', () => {
+  assert.equal(deriveJobCategory('Mechanical Test Engineer', null), 'mechanical-manufacturing');
+});
+test('IC post-silicon test engineer -> hardware-electronics', () => {
+  assert.equal(deriveJobCategory('IC Post-Silicon Test Engineer', null), 'hardware-electronics');
+});
+test('electrical sustaining & test engineering -> hardware-electronics', () => {
+  assert.equal(deriveJobCategory('Electrical Engineer - Sustaining and Test Engineering', null), 'hardware-electronics');
+});
+test('software test engineer stays qa', () => {
+  assert.equal(deriveJobCategory('Software Test Engineer', null), 'qa');
+  assert.equal(deriveJobCategory('Test Engineer', null), 'qa');
+});

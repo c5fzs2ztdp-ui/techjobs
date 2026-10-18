@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, afterEach, beforeAll } from 'vitest';
-import { render, screen, waitFor, cleanup } from '@testing-library/react';
+import { render, screen, waitFor, cleanup, fireEvent } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { MemoryRouter } from 'react-router-dom';
+import { MemoryRouter, Routes, Route, Link } from 'react-router-dom';
 import Jobs from '@/pages/Jobs';
 
 const PAYLOAD = {
@@ -70,5 +70,31 @@ describe('Jobs URL params', () => {
     renderJobs('/jobs?city=Tel Aviv');
     await waitFor(() => expect(screen.getByText('Backend Engineer')).toBeTruthy());
     expect(screen.queryByText('Product Designer')).toBeNull();
+  });
+
+  it('clears the URL-derived city filter when the city parameter disappears', async () => {
+    // Navigating from /jobs?city=Tel%20Aviv to plain /jobs must drop the
+    // city filter, or the list stays filtered with no URL state for it.
+    mockFetch();
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    render(
+      <QueryClientProvider client={client}>
+        <MemoryRouter initialEntries={['/jobs?city=Tel%20Aviv']}>
+          <Routes>
+            <Route path="/jobs" element={<>
+              <Link to="/jobs">plain-jobs</Link>
+              <Jobs />
+            </>} />
+          </Routes>
+        </MemoryRouter>
+      </QueryClientProvider>
+    );
+
+    await waitFor(() => expect(screen.getByText('Backend Engineer')).toBeTruthy());
+    await waitFor(() => expect(screen.queryByText('Product Designer')).toBeNull()); // Haifa job filtered out
+
+    fireEvent.click(screen.getByText('plain-jobs'));
+
+    await waitFor(() => expect(screen.getByText('Product Designer')).toBeTruthy()); // filter dropped
   });
 });

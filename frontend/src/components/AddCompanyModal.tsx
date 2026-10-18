@@ -119,8 +119,12 @@ export default function AddCompanyModal({ open, onOpenChange }: AddCompanyModalP
     const base =
       (import.meta.env.VITE_SUBMIT_COMPANY_URL as string) ||
       'https://github.com/natifridman/techjobs';
-    const title = encodeURIComponent(`Add company: ${formData.name}`);
-    const body = encodeURIComponent('```json\n' + generateJson() + '\n```');
+    // The registration number previously reached GitHub in the proposed
+    // <companyNumber>.json filename; keep it visible in the issue itself.
+    const title = encodeURIComponent(`Add company: ${formData.name} (${formData.companyNumber})`);
+    const body = encodeURIComponent(
+      `Company registration number: ${formData.companyNumber}\n\n` + '```json\n' + generateJson() + '\n```'
+    );
     window.open(`${base}/issues/new?title=${title}&body=${body}`, '_blank', 'noopener');
   };
 

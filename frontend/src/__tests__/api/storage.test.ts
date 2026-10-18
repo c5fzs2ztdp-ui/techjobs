@@ -691,6 +691,65 @@ describe('reconcileGuestSavedJobs - reviewer regressions', () => {
   });
 });
 
+describe('reconcileGuestSavedJobs - pending compensating deletes', () => {
+  beforeEach(() => {
+    localStorage.clear();
+  });
+
+  it('remembers a failed compensating delete so the next run retries it', async () => {
+    // The user deletes the local save while its POST is in flight, and the
+    // compensating DELETE then fails. The account id must persist for retry,
+    // or the deleted save reappears from the account on the next sync.
+    server.use(
+      http.post('/api/saved-jobs', async () => {
+        localStorage.removeItem('techjobs_saved_jobs'); // user deleted mid-upload
+        return HttpResponse.json({ id: 'server-9' }, { status: 201 });
+      }),
+      http.delete('/api/saved-jobs/server-9', () => new HttpResponse(null, { status: 500 }))
+    );
+    localStorage.setItem('techjobs_saved_jobs', JSON.stringify([{
+      id: 'local-1', job_title: 'Guest Job', company: 'Guest Corp', url: 'http://example.com/job-1',
+      applied: false, applied_date: null, comments: '', created_date: '2026-10-09T00:00:00.000Z',
+    }]));
+
+    await reconcileGuestSavedJobs();
+
+    expect(JSON.parse(localStorage.getItem('techjobs_pending_saved_job_deletes') || '[]')).toEqual(['server-9']);
+  });
+
+  it('retries pending deletes until the server confirms absence', async () => {
+    let deletes = 0;
+    server.use(
+      http.delete('/api/saved-jobs/server-9', () => {
+        deletes += 1;
+        return deletes === 1
+          ? new HttpResponse(null, { status: 500 })
+          : new HttpResponse(null, { status: 200 });
+      })
+    );
+    localStorage.setItem('techjobs_pending_saved_job_deletes', JSON.stringify(['server-9']));
+
+    await reconcileGuestSavedJobs(); // 500: stays pending
+    expect(deletes).toBe(1);
+    expect(JSON.parse(localStorage.getItem('techjobs_pending_saved_job_deletes') || '[]')).toEqual(['server-9']);
+
+    await reconcileGuestSavedJobs(); // 200: cleared
+    expect(deletes).toBe(2);
+    expect(localStorage.getItem('techjobs_pending_saved_job_deletes')).toBeNull();
+  });
+
+  it('treats a 404 on a pending delete as confirmed absent', async () => {
+    server.use(
+      http.delete('/api/saved-jobs/server-9', () => new HttpResponse(null, { status: 404 }))
+    );
+    localStorage.setItem('techjobs_pending_saved_job_deletes', JSON.stringify(['server-9']));
+
+    await reconcileGuestSavedJobs();
+
+    expect(localStorage.getItem('techjobs_pending_saved_job_deletes')).toBeNull();
+  });
+});
+
 describe('reconcileGuestSavedJobs - concurrency', () => {
   beforeEach(() => {
     localStorage.clear();

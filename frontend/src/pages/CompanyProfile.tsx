@@ -28,6 +28,13 @@ export default function CompanyProfile() {
     select: (payload) => selectSortedJobs(payload).filter(j => !isClosed(j)),
   });
 
+  const { data: cityLabels = {} } = useQuery({
+    queryKey: JOBS_PAYLOAD_QUERY_KEY,
+    queryFn: fetchJobsPayload,
+    staleTime: 1000 * 60 * 5, // 5 minutes
+    select: (payload) => payload.cityLabels ?? {},
+  });
+
   const { data: savedJobs = [] } = useQuery({
     queryKey: ['savedJobs'],
     queryFn: () => savedJobsApi.list(),
@@ -66,14 +73,26 @@ export default function CompanyProfile() {
 
     // Aggregate data
     const categories = Array.from(new Set(companyJobs.map(j => j.department).filter(Boolean))) as string[];
-    const locations = Array.from(new Set(companyJobs.map(j => displayCity(j)).filter(Boolean)));
+    // Cards may list several canonical cities; surface them all (with
+    // their Hebrew labels), not just the primary one.
+    const locations = Array.from(new Set(companyJobs.flatMap(j =>
+      j.cities.length > 0 ? j.cities.map(c => cityLabels[c] || c) : [displayCity(j)]
+    ).filter(Boolean)));
     const jobCategories = Array.from(new Set(companyJobs.map(j => j.job_category).filter(Boolean)));
 
+    // Mirror the Jobs page: search every canonical city and its Hebrew
+    // label, not just the primary English city.
+    const search = searchQuery.toLowerCase();
     const filteredJobs = companyJobs.filter(job =>
       !searchQuery ||
-      job.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      job.city?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      job.job_category?.toLowerCase().includes(searchQuery.toLowerCase())
+      job.title.toLowerCase().includes(search) ||
+      job.city?.toLowerCase().includes(search) ||
+      job.cityHe?.includes(searchQuery) ||
+      job.cities.some(city =>
+        city.toLowerCase().includes(search) ||
+        (cityLabels[city] || '').toLowerCase().includes(search)
+      ) ||
+      job.job_category?.toLowerCase().includes(search)
     );
 
     return {
@@ -85,7 +104,7 @@ export default function CompanyProfile() {
       jobCategories,
       latestUpdate: companyJobs[0]?.updated
     };
-  }, [jobs, companyName, searchQuery]);
+  }, [jobs, companyName, searchQuery, cityLabels]);
 
   const isJobSaved = (job: Job) => savedJobs.some(s => s.url === job.url);
 
