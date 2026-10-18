@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import type { HTMLAttributes } from 'react';
+import logoManifest from '../generated/companyLogos.json';
 
 interface CompanyLogoProps extends Omit<HTMLAttributes<HTMLDivElement>, 'children'> {
   name: string;
@@ -8,6 +9,10 @@ interface CompanyLogoProps extends Omit<HTMLAttributes<HTMLDivElement>, 'childre
   textSize?: string;
 }
 
+// Logo files are fetched at build/data time from each company's own domain
+// (scripts/fetch_logos.mjs) and served from /logos/. Companies without a
+// fetched logo keep the initial-letter avatar; a failed image load falls
+// back to the same avatar.
 export default function CompanyLogo({
   name,
   logoUrl: providedLogoUrl,
@@ -17,17 +22,14 @@ export default function CompanyLogo({
 }: CompanyLogoProps) {
   const [error, setError] = useState(false);
 
-  // Clean company name for better logo matching
-  const cleanName = name?.replace(/ Ltd\.?$/i, '').replace(/ Inc\.?$/i, '').trim();
-  const clearbitUrl = `https://logo.clearbit.com/${cleanName?.replace(/\s+/g, '').toLowerCase()}.com`;
-
-  const logoUrl = providedLogoUrl || clearbitUrl;
-
   if (!name) return null;
 
-  if (error) {
+  const file = (logoManifest as Record<string, string>)[name];
+  const logoUrl = providedLogoUrl || (file ? `/logos/${file}` : null);
+
+  if (!logoUrl || error) {
     return (
-      <div 
+      <div
         className={`${className} rounded-lg bg-iris-100 flex items-center justify-center ${textSize} font-bold text-iris-600 shrink-0`}
         role="img"
         aria-label={`${name} logo`}
@@ -39,7 +41,7 @@ export default function CompanyLogo({
   }
 
   return (
-    <div 
+    <div
       className={`${className} rounded-lg bg-white border border-warm-100 flex items-center justify-center overflow-hidden shrink-0`}
       {...rest}
     >
@@ -47,6 +49,8 @@ export default function CompanyLogo({
         src={logoUrl}
         alt={`${name} logo`}
         className="w-full h-full object-contain p-2"
+        loading="lazy"
+        decoding="async"
         onError={() => setError(true)}
       />
     </div>
