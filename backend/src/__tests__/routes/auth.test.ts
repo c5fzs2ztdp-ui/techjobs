@@ -93,3 +93,27 @@ describe('Auth Routes', () => {
     });
   });
 });
+
+describe('authFailureRedirect', () => {
+  const ORIGINAL = process.env.FRONTEND_URL;
+
+  afterEach(() => {
+    if (ORIGINAL === undefined) {
+      delete process.env.FRONTEND_URL;
+    } else {
+      process.env.FRONTEND_URL = ORIGINAL;
+    }
+  });
+
+  it('points browsers back at the app with an authError flag', async () => {
+    process.env.FRONTEND_URL = 'https://techjobsil.com/';
+    const { authFailureRedirect } = await import('../../routes/auth');
+    expect(authFailureRedirect()).toBe('https://techjobsil.com/?authError=1');
+  });
+
+  it('falls back to the local dev frontend', async () => {
+    delete process.env.FRONTEND_URL;
+    const { authFailureRedirect } = await import('../../routes/auth');
+    expect(authFailureRedirect()).toBe('http://localhost:8080/?authError=1');
+  });
+});
