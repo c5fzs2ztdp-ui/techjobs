@@ -296,7 +296,14 @@ const jobs = israeliRows.map(j => {
   const { city, cityHe } = normalizeCity(
     (typeof j.city === 'string' && j.city) || (typeof j.location === 'string' && j.location) || null,
   );
-  const cities = [...new Set([...(Array.isArray(j.cities) ? j.cities : []), city].filter(Boolean))];
+  // Every upstream cities entry goes through the same normalization as the
+  // primary city: aliases canonicalize (Tel Aviv-Yafo -> Tel Aviv), junk is
+  // discarded, and the Set dedupes the canonical names - otherwise aliases
+  // coexist with the canonical name and inflate city facets and counts.
+  const cities = [...new Set([
+    ...(Array.isArray(j.cities) ? j.cities : []).map((c) => normalizeCity(typeof c === 'string' ? c : null).city),
+    city,
+  ].filter(Boolean))];
   // Regions derive from every canonical city; explicit upstream annotations
   // are merged only when they are supported region slugs.
   const regions = deriveRegions(cities, j.regions, j.region);

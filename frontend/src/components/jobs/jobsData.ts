@@ -1,9 +1,17 @@
 // Job data for TechJobsIL. The frontend fetches a JSON payload (produced by
 // scripts/convert_jobs.mjs) straight from a plain URL - see VITE_JOBS_DATA_URL
 // in the README - so data updates never require a site redeploy.
-export const JOBS_DATA_URL =
-  (import.meta.env.VITE_JOBS_DATA_URL as string) ||
-  'https://raw.githubusercontent.com/c5fzs2ztdp-ui/techjobs/data/jobs.json';
+// There is deliberately no default feed: a build must point at the jobs.json
+// maintained alongside its own deployment, so a missing override fails loudly
+// here instead of silently depending on someone else's feed for availability
+// and updates.
+const configuredJobsUrl = import.meta.env.VITE_JOBS_DATA_URL as string | undefined;
+if (!configuredJobsUrl) {
+  throw new Error(
+    'VITE_JOBS_DATA_URL is not set: point it at the jobs.json feed maintained alongside this deployment (see README).',
+  );
+}
+export const JOBS_DATA_URL = configuredJobsUrl;
 
 // Renderer-facing fields from the techjob_map 21-field schema (ops/provenance fields stay in the dataset) plus site-specific derived fields.
 export interface Job {

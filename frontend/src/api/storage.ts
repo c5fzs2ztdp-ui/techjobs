@@ -1,6 +1,8 @@
 // API client for backend service
 // Falls back to localStorage if backend is unavailable or user is not authenticated
 
+import { authApi } from './auth';
+
 const API_BASE_URL = import.meta.env.VITE_API_URL || '/api';
 
 export interface SavedJob {
@@ -487,11 +489,12 @@ async function flushPendingDeletes(accountId: string): Promise<void> {
 // Pending sync data is scoped to the authenticated account that owns it, so
 // a sign-in as another user on the same browser never receives or clears
 // the previous account's saves.
+// The backend mounts auth at the root level (/auth/me), NOT under the /api
+// base, so this must go through authApi - fetching `${API_BASE_URL}/auth/me`
+// misses the route, resolves null, and silently disables reconciliation.
 async function getAuthenticatedAccountId(): Promise<string | null> {
   try {
-    const response = await fetch(`${API_BASE_URL}/auth/me`, { credentials: 'include' });
-    if (!response.ok) return null;
-    const state: { authenticated?: boolean; user?: { id?: string } | null } = await response.json();
+    const state = await authApi.getMe();
     return state.authenticated && state.user?.id ? state.user.id : null;
   } catch {
     return null;
