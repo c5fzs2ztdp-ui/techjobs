@@ -1,0 +1,20 @@
+name: Feed health
+
+# Watches the published jobs feed (data branch) so a broken publish, a silent
+# shrink, or junk rows surface as a red check instead of a quietly degraded
+# site. Runs hourly and on demand; the publish workflow refreshes the feed
+# roughly every 5 hours.
+
+on:
+  schedule:
+    - cron: '7 * * * *'
+  workflow_dispatch:
+
+permissions: {}
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: node scripts/check_feed_health.mjs
