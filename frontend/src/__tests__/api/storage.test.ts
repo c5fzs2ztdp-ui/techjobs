@@ -838,6 +838,62 @@ describe('account scoping and edit retention', () => {
     expect(JSON.parse(localStorage.getItem('techjobs_saved_jobs') || '[]')).toHaveLength(1);
   });
 
+  it('guest create dedupe ignores records synced to an account', async () => {
+    // After logout, a retained copy owned by account A is hidden; saving the
+    // same URL as a guest must create a real guest save, not return A's copy.
+    server.use(
+      http.post('/api/saved-jobs', () => new HttpResponse(null, { status: 401 }))
+    );
+    localStorage.setItem('techjobs_saved_jobs', JSON.stringify([
+      { id: 'l3', job_title: 'A Save', company: 'C', url: 'http://example.com/shared', created_date: '2026-10-09T00:00:00.000Z', syncedTo: 'other-user' },
+    ]));
+
+    const created = await savedJobsApi.create({ job_title: 'A Save', company: 'C', url: 'http://example.com/shared' } as never);
+
+    expect(created.id).not.toBe('l3');
+    expect(JSON.parse(localStorage.getItem('techjobs_saved_jobs') || '[]')).toHaveLength(2);
+  });
+
+  it('an offline double-save does not create duplicate guest records', async () => {
+    server.use(
+      http.post('/api/saved-jobs', () => HttpResponse.error())
+    );
+
+    const first = await savedJobsApi.create({ job_title: 'J', company: 'C', url: 'http://example.com/x' } as never);
+    const second = await savedJobsApi.create({ job_title: 'J', company: 'C', url: 'http://example.com/x' } as never);
+
+    expect(second.id).toBe(first.id);
+    expect(JSON.parse(localStorage.getItem('techjobs_saved_jobs') || '[]')).toHaveLength(1);
+  });
+
+  it('aborts reconciliation when the authenticated account changes mid-run', async () => {
+    // auth/me resolves user-123 once, then another tab's sign-in flips the
+    // session to user-456: no writes may follow.
+    let meCalls = 0;
+    let posts = 0;
+    server.use(
+      http.get('/api/auth/me', () => {
+        meCalls += 1;
+        return HttpResponse.json({
+          authenticated: true,
+          user: meCalls === 1 ? { id: 'user-123' } : { id: 'user-456' },
+        });
+      }),
+      http.post('/api/saved-jobs', () => { posts += 1; return HttpResponse.json({ id: 'srv-1' }, { status: 201 }); })
+    );
+    localStorage.setItem('techjobs_saved_jobs', JSON.stringify([{
+      id: 'local-1', job_title: 'Guest Job', company: 'Guest Corp', url: 'http://example.com/job-1',
+      applied: false, applied_date: null, comments: 'private', created_date: '2026-10-09T00:00:00.000Z',
+    }]));
+
+    await reconcileGuestSavedJobs();
+
+    expect(posts).toBe(0);
+    const stored = JSON.parse(localStorage.getItem('techjobs_saved_jobs') || '[]');
+    expect(stored).toHaveLength(1);
+    expect(stored[0].syncedTo).toBeUndefined();
+  });
+
   it('does not touch pending deletions owned by another account', async () => {
     // A 404 (or any result) under the current account must not clear a
     // pending deletion that belongs to a different account's row.

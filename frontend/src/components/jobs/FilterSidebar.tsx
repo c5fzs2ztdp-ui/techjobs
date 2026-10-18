@@ -62,7 +62,8 @@ export default function FilterSidebar({
     filters.employmentTypes.length +
     filters.seniorities.length +
     filters.cities.length +
-    filters.regions.length;
+    filters.regions.length +
+    (filters.showClosed ? 1 : 0);
 
   const renderCheckboxList = (
     legend: string,

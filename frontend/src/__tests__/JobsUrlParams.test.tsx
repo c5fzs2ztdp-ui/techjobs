@@ -94,6 +94,15 @@ describe('Jobs URL params', () => {
     await waitFor(() => expect(screen.queryByText('Product Designer')).toBeNull());
   });
 
+  it('ignores inherited-property category slugs like toString', async () => {
+    // CATEGORY_LABELS is a plain object: 'toString' is truthy through
+    // Object.prototype and must not be accepted as a category slug.
+    mockFetch();
+    renderJobs('/jobs?category=toString');
+    await waitFor(() => expect(screen.getByText('Backend Engineer')).toBeTruthy());
+    await waitFor(() => expect(screen.getByText('Product Designer')).toBeTruthy());
+  });
+
   it('clears the URL-derived category filter when the category parameter disappears', async () => {
     mockFetch();
     const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
