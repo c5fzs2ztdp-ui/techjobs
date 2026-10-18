@@ -4,6 +4,13 @@ import type { User } from '../config/passport';
 
 const router = Router();
 
+// Where a browser lands when Google sign-in fails (denied consent, Google
+// error): back at the app, where the frontend turns the authError param
+// into a toast - never a bare JSON error page. Trailing slashes on
+// FRONTEND_URL are stripped so the param URL stays clean.
+export const authFailureRedirect = (): string =>
+  `${(process.env.FRONTEND_URL || 'http://localhost:8080').replace(/\/+$/, '')}/?authError=1`;
+
 // Extend Express Request to include user
 declare global {
   namespace Express {
@@ -56,7 +63,7 @@ router.get('/google', (req: Request, res: Response, next: NextFunction) => {
 // Google OAuth callback
 router.get('/google/callback',
   passport.authenticate('google', {
-    failureRedirect: '/auth/failure'
+    failureRedirect: authFailureRedirect()
   }),
   (req: Request, res: Response) => {
     // Redirect to frontend after successful login
