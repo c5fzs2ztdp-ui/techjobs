@@ -3,7 +3,22 @@ import {
   insertCompany,
   getCompanyById,
   createUnauthenticatedRequest,
+  createAuthenticatedRequest,
+  TestUser,
 } from '../helpers';
+
+// Company mutations require a signed-in user; reads stay public. The user
+// row never touches the database (companies have no user FK), so a plain
+// object is enough for the injected request user.
+const AUTH_USER: TestUser = {
+  id: 'companies-test-user',
+  google_id: 'google-companies-test-user',
+  email: 'companies-test@example.com',
+  name: 'Companies Test User',
+  picture: '',
+  created_date: '2026-01-01T00:00:00.000Z',
+  updated_date: '2026-01-01T00:00:00.000Z',
+};
 
 describe('Companies Routes', () => {
   beforeEach(async () => {
@@ -136,7 +151,7 @@ describe('Companies Routes', () => {
 
   describe('POST /api/companies', () => {
     it('should create a new company', async () => {
-      const response = await createUnauthenticatedRequest()
+      const response = await createAuthenticatedRequest(AUTH_USER)
         .post('/api/companies')
         .send({
           name: 'New Corp',
@@ -158,7 +173,7 @@ describe('Companies Routes', () => {
     });
 
     it('should create company with similar_companies array', async () => {
-      const response = await createUnauthenticatedRequest()
+      const response = await createAuthenticatedRequest(AUTH_USER)
         .post('/api/companies')
         .send({
           name: 'New Corp',
@@ -170,7 +185,7 @@ describe('Companies Routes', () => {
     });
 
     it('should return 400 when name is missing', async () => {
-      const response = await createUnauthenticatedRequest()
+      const response = await createAuthenticatedRequest(AUTH_USER)
         .post('/api/companies')
         .send({
           description: 'A company without a name',
@@ -189,7 +204,7 @@ describe('Companies Routes', () => {
         updated_date: now,
       });
 
-      const response = await createUnauthenticatedRequest()
+      const response = await createAuthenticatedRequest(AUTH_USER)
         .post('/api/companies')
         .send({
           name: 'Existing Corp',
@@ -211,7 +226,7 @@ describe('Companies Routes', () => {
         updated_date: now,
       });
 
-      const response = await createUnauthenticatedRequest()
+      const response = await createAuthenticatedRequest(AUTH_USER)
         .put('/api/companies/update-company')
         .send({ description: 'Updated description' })
         .expect(200);
@@ -228,7 +243,7 @@ describe('Companies Routes', () => {
         updated_date: now,
       });
 
-      const response = await createUnauthenticatedRequest()
+      const response = await createAuthenticatedRequest(AUTH_USER)
         .put('/api/companies/similar-company')
         .send({ similar_companies: ['Related A', 'Related B'] })
         .expect(200);
@@ -237,7 +252,7 @@ describe('Companies Routes', () => {
     });
 
     it('should return 404 for non-existent ID', async () => {
-      const response = await createUnauthenticatedRequest()
+      const response = await createAuthenticatedRequest(AUTH_USER)
         .put('/api/companies/non-existent')
         .send({ description: 'Updated' })
         .expect(404);
@@ -254,7 +269,7 @@ describe('Companies Routes', () => {
         updated_date: now,
       });
 
-      const response = await createUnauthenticatedRequest()
+      const response = await createAuthenticatedRequest(AUTH_USER)
         .put('/api/companies/no-update-company')
         .send({ invalid_field: 'value' })
         .expect(400);
@@ -265,7 +280,7 @@ describe('Companies Routes', () => {
 
   describe('PUT /api/companies/by-name/:name', () => {
     it('should create new company if not exists (upsert)', async () => {
-      const response = await createUnauthenticatedRequest()
+      const response = await createAuthenticatedRequest(AUTH_USER)
         .put(`/api/companies/by-name/${encodeURIComponent('New Upsert Corp')}`)
         .send({
           description: 'Created via upsert',
@@ -290,7 +305,7 @@ describe('Companies Routes', () => {
         updated_date: now,
       });
 
-      const response = await createUnauthenticatedRequest()
+      const response = await createAuthenticatedRequest(AUTH_USER)
         .put(`/api/companies/by-name/${encodeURIComponent('Existing Upsert Corp')}`)
         .send({
           description: 'Updated via upsert',
@@ -312,7 +327,7 @@ describe('Companies Routes', () => {
         updated_date: now,
       });
 
-      await createUnauthenticatedRequest()
+      await createAuthenticatedRequest(AUTH_USER)
         .delete('/api/companies/delete-company')
         .expect(204);
 
@@ -322,11 +337,40 @@ describe('Companies Routes', () => {
     });
 
     it('should return 404 for non-existent ID', async () => {
-      const response = await createUnauthenticatedRequest()
+      const response = await createAuthenticatedRequest(AUTH_USER)
         .delete('/api/companies/non-existent')
         .expect(404);
 
       expect(response.body).toEqual({ error: 'Company not found' });
+    });
+  });
+
+  describe('mutations require authentication', () => {
+    it('rejects anonymous POST /api/companies', async () => {
+      await createUnauthenticatedRequest()
+        .post('/api/companies')
+        .send({ name: 'Anon Corp' })
+        .expect(401);
+    });
+
+    it('rejects anonymous PUT /api/companies/:id', async () => {
+      await createUnauthenticatedRequest()
+        .put('/api/companies/some-id')
+        .send({ description: 'anon edit' })
+        .expect(401);
+    });
+
+    it('rejects anonymous PUT /api/companies/by-name/:name', async () => {
+      await createUnauthenticatedRequest()
+        .put(`/api/companies/by-name/${encodeURIComponent('Anon Corp')}`)
+        .send({ description: 'anon upsert' })
+        .expect(401);
+    });
+
+    it('rejects anonymous DELETE /api/companies/:id', async () => {
+      await createUnauthenticatedRequest()
+        .delete('/api/companies/some-id')
+        .expect(401);
     });
   });
 });

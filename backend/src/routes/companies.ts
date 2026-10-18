@@ -1,8 +1,13 @@
 import { Router, Request, Response } from 'express';
 import { v4 as uuidv4 } from 'uuid';
 import supabase, { Company } from '../database';
+import { requireAuth } from './auth';
 
 const router = Router();
+
+// Reads stay public (the site is guest-open); writes require a signed-in
+// user, same as /api/saved-jobs - an anonymous caller must not be able to
+// create, edit, or delete company records.
 
 // GET all companies
 router.get('/', async (req: Request, res: Response) => {
@@ -75,7 +80,7 @@ router.get('/:id', async (req: Request, res: Response) => {
 });
 
 // POST create new company
-router.post('/', async (req: Request, res: Response) => {
+router.post('/', requireAuth, async (req: Request, res: Response) => {
   try {
     const {
       name,
@@ -131,7 +136,7 @@ router.post('/', async (req: Request, res: Response) => {
 });
 
 // PUT update company
-router.put('/:id', async (req: Request, res: Response) => {
+router.put('/:id', requireAuth, async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
     const updates = req.body;
@@ -186,7 +191,7 @@ router.put('/:id', async (req: Request, res: Response) => {
 });
 
 // PUT upsert company by name
-router.put('/by-name/:name', async (req: Request, res: Response) => {
+router.put('/by-name/:name', requireAuth, async (req: Request, res: Response) => {
   try {
     const name = decodeURIComponent(req.params.name as string);
     const updates = req.body;
@@ -272,7 +277,7 @@ router.put('/by-name/:name', async (req: Request, res: Response) => {
 });
 
 // DELETE company
-router.delete('/:id', async (req: Request, res: Response) => {
+router.delete('/:id', requireAuth, async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
     
