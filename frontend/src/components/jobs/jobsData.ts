@@ -191,6 +191,7 @@ export function parseJobsPayload(raw: unknown): JobsPayload {
     rec.cities = stringArray(rec.cities).filter(isSafeLookupKey);
     rec.regions = stringArray(rec.regions).filter(isSafeLookupKey);
     if (rec.region !== null && !isSafeLookupKey(rec.region as string)) rec.region = null;
+    if (rec.city !== null && !isSafeLookupKey(rec.city as string)) rec.city = null;
     if (rec.employmentType !== null && !EMPLOYMENT_TYPES.has(rec.employmentType as string)) rec.employmentType = null;
     if (rec.workModel !== null && !WORK_MODELS.has(rec.workModel as string)) rec.workModel = null;
     if (rec.seniority !== null && !SENIORITIES.has(rec.seniority as string)) rec.seniority = null;

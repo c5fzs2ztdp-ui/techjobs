@@ -755,6 +755,29 @@ describe('account scoping and edit retention', () => {
     localStorage.clear();
   });
 
+  it('list() does not overlay local records owned by another account', async () => {
+    // Signed in as user-123 (default mock): the account response has one
+    // row; localStorage holds an unclaimed guest save, a record this account
+    // synced, and a record another account synced. Only the first two may
+    // appear in the merged list.
+    server.use(
+      http.get('/api/saved-jobs', () =>
+        HttpResponse.json([{ id: 'srv-1', job_title: 'Account Job', company: 'Corp', url: 'http://example.com/account', applied: false, applied_date: null, comments: null }])
+      )
+    );
+    localStorage.setItem('techjobs_saved_jobs', JSON.stringify([
+      { id: 'l1', job_title: 'Guest Save', company: 'C', url: 'http://example.com/guest', created_date: '2026-10-09T00:00:00.000Z' },
+      { id: 'l2', job_title: 'Mine Synced', company: 'C', url: 'http://example.com/mine', created_date: '2026-10-09T00:00:00.000Z', syncedTo: 'user-123' },
+      { id: 'l3', job_title: 'Other Account Save', company: 'C', url: 'http://example.com/other', comments: 'private note', created_date: '2026-10-09T00:00:00.000Z', syncedTo: 'other-user' },
+    ]));
+
+    const jobs = await savedJobsApi.list();
+
+    expect(jobs.map((j) => j.url).sort()).toEqual([
+      'http://example.com/account', 'http://example.com/guest', 'http://example.com/mine',
+    ]);
+  });
+
   it('does not touch pending deletions owned by another account', async () => {
     // A 404 (or any result) under the current account must not clear a
     // pending deletion that belongs to a different account's row.

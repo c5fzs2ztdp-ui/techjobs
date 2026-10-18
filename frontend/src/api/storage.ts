@@ -104,8 +104,15 @@ export const savedJobsApi = {
         const serverJobs: SavedJob[] = await response.json();
         // Guest records whose upload has not completed stay visible alongside
         // account saves, marked pending - otherwise a failed reconciliation
-        // looks like "No saved jobs yet" after sign-in.
-        const localJobs = getLocalJobs();
+        // looks like "No saved jobs yet" after sign-in. The overlay is scoped
+        // to this account: a record synced to a different account (an earlier
+        // sign-in on this browser) must not leak its details or private
+        // comments here. When the account cannot be resolved, only unclaimed
+        // guest records overlay - synced records still show from the server.
+        const accountId = await getAuthenticatedAccountId();
+        const localJobs = getLocalJobs().filter(
+          (j) => !j.syncedTo || (accountId !== null && j.syncedTo === accountId),
+        );
         const serverUrls = new Set(serverJobs.map((j) => j.url));
         const pending = localJobs
           .filter((j) => !serverUrls.has(j.url))
