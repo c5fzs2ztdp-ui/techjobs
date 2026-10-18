@@ -221,8 +221,9 @@ export const savedJobsApi = {
       
         if (!response.ok) throw new Error('Failed to update');
         if (url) {
+          const accountId = await getAuthenticatedAccountId();
           const jobs = getLocalJobs();
-          const index = jobs.findIndex((j) => j.url === url);
+          const index = jobs.findIndex((j) => j.url === url && canMirrorToRecord(j, accountId));
           if (index !== -1) {
             const merged = { ...jobs[index], ...data };
             const last = { ...(jobs[index].lastUploaded ?? {}) };
@@ -241,7 +242,10 @@ export const savedJobsApi = {
     // The displayed account row carries the server id while a retained local
     // duplicate has a different id: fall back to the job URL so the edit is
     // retained locally for the next reconciliation instead of being lost.
-    if (index === -1 && url) index = jobs.findIndex((j) => j.url === url);
+    if (index === -1 && url) {
+      const accountId = await getAuthenticatedAccountId();
+      index = jobs.findIndex((j) => j.url === url && canMirrorToRecord(j, accountId));
+    }
     if (index === -1) throw error; // nowhere to retain the edit - reject the mutation
     jobs[index] = { ...jobs[index], ...data };
     setLocalJobs(jobs);
@@ -271,16 +275,18 @@ export const savedJobsApi = {
       
         if (!response.ok && response.status !== 404) throw new Error('Failed to delete');
         if (response.ok && url) {
+          const accountId = await getAuthenticatedAccountId();
           const jobs = getLocalJobs();
-          const filtered = jobs.filter((j) => j.url !== url);
+          const filtered = jobs.filter((j) => !(j.url === url && canMirrorToRecord(j, accountId)));
           if (filtered.length < jobs.length) setLocalJobs(filtered);
         }
         if (response.status === 404) {
           // Confirmed absent for this account: remove a pending local record
           // by id, and any retained local duplicate of the same job by URL,
           // or the next reconciliation recreates the deleted save.
+          const accountId = await getAuthenticatedAccountId();
           const jobs = getLocalJobs();
-          const filtered = jobs.filter((j) => j.id !== id && (!url || j.url !== url));
+          const filtered = jobs.filter((j) => j.id !== id && !(url && j.url === url && canMirrorToRecord(j, accountId)));
           if (filtered.length < jobs.length) { setLocalJobs(filtered); return true; }
         }
         return response.ok;
@@ -438,6 +444,14 @@ async function getAuthenticatedAccountId(): Promise<string | null> {
   } catch {
     return null;
   }
+}
+
+// URL-based mirroring may only touch records the active account can affect:
+// unclaimed guest saves or records synced to that account. Another account's
+// retained copy of the same job URL is left alone. When the identity cannot
+// be resolved, only unclaimed records are eligible.
+function canMirrorToRecord(job: SavedJob, accountId: string | null): boolean {
+  return !job.syncedTo || (accountId !== null && job.syncedTo === accountId);
 }
 
 // Login, the Saved Jobs page and the Retry sync action can all trigger a

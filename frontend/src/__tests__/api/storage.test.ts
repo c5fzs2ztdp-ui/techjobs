@@ -807,6 +807,37 @@ describe('account scoping and edit retention', () => {
     expect(jobs.map((j) => j.url).sort()).toEqual(['http://example.com/guest', 'http://example.com/mine']);
   });
 
+  it('URL mirroring on update leaves another account copy untouched', async () => {
+    let putBody: Record<string, unknown> | null = null;
+    server.use(
+      http.put('/api/saved-jobs/srv-1', async ({ request }) => {
+        putBody = await request.json() as Record<string, unknown>;
+        return HttpResponse.json({ id: 'srv-1', ...putBody });
+      })
+    );
+    localStorage.setItem('techjobs_saved_jobs', JSON.stringify([
+      { id: 'l3', job_title: 'Other Account Save', company: 'C', url: 'http://example.com/shared', comments: 'A note', created_date: '2026-10-09T00:00:00.000Z', syncedTo: 'other-user' },
+    ]));
+
+    await savedJobsApi.update('srv-1', { comments: 'B note' }, 'http://example.com/shared');
+
+    const stored = JSON.parse(localStorage.getItem('techjobs_saved_jobs') || '[]');
+    expect(stored[0].comments).toBe('A note'); // not overwritten by B's edit
+  });
+
+  it('URL cleanup on delete leaves another account copy untouched', async () => {
+    server.use(
+      http.delete('/api/saved-jobs/srv-1', () => HttpResponse.json({}, { status: 200 }))
+    );
+    localStorage.setItem('techjobs_saved_jobs', JSON.stringify([
+      { id: 'l3', job_title: 'Other Account Save', company: 'C', url: 'http://example.com/shared', created_date: '2026-10-09T00:00:00.000Z', syncedTo: 'other-user' },
+    ]));
+
+    await savedJobsApi.delete('srv-1', 'http://example.com/shared');
+
+    expect(JSON.parse(localStorage.getItem('techjobs_saved_jobs') || '[]')).toHaveLength(1);
+  });
+
   it('does not touch pending deletions owned by another account', async () => {
     // A 404 (or any result) under the current account must not clear a
     // pending deletion that belongs to a different account's row.
