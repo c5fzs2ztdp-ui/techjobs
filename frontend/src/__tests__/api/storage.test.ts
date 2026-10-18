@@ -1026,6 +1026,132 @@ describe('account scoping and edit retention', () => {
     expect(posts).toBe(1);
   });
 
+  it('list discards the result when the account changes between the identity check and the read', async () => {
+    // Session flips A -> B between /auth/me and the jobs response: A's
+    // server rows must not merge with B's local overlay.
+    let meCalls = 0;
+    server.use(
+      http.get('/auth/me', () => {
+        meCalls += 1;
+        // First call (before the read): user-123. The re-check after the
+        // response sees the flipped session.
+        return HttpResponse.json({ authenticated: true, user: { id: meCalls === 1 ? 'user-123' : 'user-456' } });
+      }),
+      http.get('/api/saved-jobs', () =>
+        HttpResponse.json([{ id: 'srv-a', job_title: 'A Row', company: 'C', url: 'http://example.com/a', applied: false, created_date: '2026-10-09T00:00:00.000Z' }]))
+    );
+    localStorage.setItem('techjobs_saved_jobs', JSON.stringify([
+      { id: 'l-b', job_title: 'B Guest', company: 'C', url: 'http://example.com/b', created_date: '2026-10-09T00:00:00.000Z' },
+    ]));
+
+    const listed = await savedJobsApi.list();
+
+    // A's server row is discarded; the fallback shows only records visible
+    // to the current (flipped) session's scope: unclaimed guest records.
+    expect(listed.find((j: { id: string }) => j.id === 'srv-a')).toBeUndefined();
+    expect(listed.find((j: { id: string }) => j.id === 'l-b')).toBeDefined();
+  });
+
+  it('binds a direct save to the resolved account and keeps it account-stamped on a mismatch', async () => {
+    let seenHeader: string | null = null;
+    server.use(
+      http.post('/api/saved-jobs', ({ request }) => {
+        seenHeader = request.headers.get('X-Expected-User-Id');
+        return HttpResponse.json({ error: 'Account changed mid-request', code: 'ACCOUNT_MISMATCH' }, { status: 409 });
+      })
+    );
+
+    const created = await savedJobsApi.create({ job_title: 'J', company: 'C', url: 'http://example.com/direct' } as never);
+
+    expect(seenHeader).toBe('user-123');
+    // Stamped to the initiating account - never an unclaimed guest record.
+    expect(created.syncedTo).toBe('user-123');
+    const stored = JSON.parse(localStorage.getItem('techjobs_saved_jobs') || '[]');
+    expect(stored).toHaveLength(1);
+    expect(stored[0].syncedTo).toBe('user-123');
+    // ...and invisible to a logged-out guest listing.
+    server.use(http.get('/api/saved-jobs', () => new HttpResponse(null, { status: 401 })));
+    const guestList = await savedJobsApi.list();
+    expect(guestList).toHaveLength(0);
+  });
+
+  it('an update rejected as ACCOUNT_MISMATCH retains the edit on the initiating account record', async () => {
+    server.use(
+      http.put('/api/saved-jobs/srv-3', () =>
+        HttpResponse.json({ error: 'Account changed mid-request', code: 'ACCOUNT_MISMATCH' }, { status: 409 }))
+    );
+    localStorage.setItem('techjobs_saved_jobs', JSON.stringify([
+      { id: 'l3', job_title: 'J', company: 'C', url: 'http://example.com/s3', created_date: '2026-10-09T00:00:00.000Z', syncedTo: 'user-123' },
+    ]));
+
+    const updated = await savedJobsApi.update('srv-3', { comments: 'kept' }, 'http://example.com/s3');
+
+    expect(updated?.comments).toBe('kept');
+    const stored = JSON.parse(localStorage.getItem('techjobs_saved_jobs') || '[]');
+    expect(stored[0].comments).toBe('kept');
+    expect(stored[0].syncedTo).toBe('user-123');
+  });
+
+  it('stamps the record as synced to the original account when the session flips after a verified write', async () => {
+    // The POST succeeds under user-123 (server verified the header), then
+    // /auth/me reports a flip to user-456: the record must stay stamped to
+    // user-123, not unclaimed.
+    let meCalls = 0;
+    server.use(
+      http.get('/auth/me', () => {
+        meCalls += 1;
+        return HttpResponse.json({ authenticated: true, user: { id: meCalls <= 2 ? 'user-123' : 'user-456' } });
+      }),
+      http.post('/api/saved-jobs', () => HttpResponse.json({ id: 'srv-1' }, { status: 201 }))
+    );
+    localStorage.setItem('techjobs_saved_jobs', JSON.stringify([{
+      id: 'local-1', job_title: 'Guest Job', company: 'C', url: 'http://example.com/flip-after',
+      created_date: '2026-10-09T00:00:00.000Z',
+    }]));
+
+    await reconcileGuestSavedJobs();
+
+    const stored = JSON.parse(localStorage.getItem('techjobs_saved_jobs') || '[]');
+    expect(stored).toHaveLength(1);
+    expect(stored[0].syncedTo).toBe('user-123');
+    // Hidden from other accounts: a guest listing shows nothing.
+    server.use(http.get('/api/saved-jobs', () => new HttpResponse(null, { status: 401 })));
+    expect(await savedJobsApi.list()).toHaveLength(0);
+  });
+
+  it('applies a mid-flight local delete to the pre-existing account row on a 409', async () => {
+    // POST conflicts with an existing account row; the user deletes the
+    // local record while the merge is in flight: the account row must be
+    // deleted (and queued if that delete fails), not left behind.
+    let deleted: string | null = null;
+    server.use(
+      http.post('/api/saved-jobs', () =>
+        HttpResponse.json({ error: 'Job with this URL already saved' }, { status: 409 })),
+      http.get('/api/saved-jobs', () =>
+        HttpResponse.json([{ id: 'srv-existing', job_title: 'J', company: 'C', url: 'http://example.com/dup', applied: true, created_date: '2026-10-09T00:00:00.000Z' }])),
+      http.put('/api/saved-jobs/srv-existing', async () => {
+        // The user deletes the local record while the merge PUT is in flight.
+        localStorage.removeItem('techjobs_saved_jobs');
+        return HttpResponse.json({ id: 'srv-existing' });
+      }),
+      http.delete('/api/saved-jobs/srv-existing', () => {
+        deleted = 'srv-existing';
+        return HttpResponse.error();
+      })
+    );
+    localStorage.setItem('techjobs_saved_jobs', JSON.stringify([{
+      id: 'local-1', job_title: 'J', company: 'C', url: 'http://example.com/dup', comments: 'note',
+      created_date: '2026-10-09T00:00:00.000Z',
+    }]));
+
+    await reconcileGuestSavedJobs();
+
+    expect(deleted).toBe('srv-existing');
+    // The delete failed: the id is queued for the owning account.
+    const queued = JSON.parse(localStorage.getItem('techjobs_pending_saved_job_deletes') || '{}');
+    expect(queued['user-123']).toEqual(['srv-existing']);
+  });
+
   it('does not touch pending deletions owned by another account', async () => {
     // A 404 (or any result) under the current account must not clear a
     // pending deletion that belongs to a different account's row.

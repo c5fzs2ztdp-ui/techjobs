@@ -99,15 +99,40 @@ function createLocalGuestSave(job: Omit<SavedJob, 'id' | 'created_date'>): Saved
   return newJob;
 }
 
+// A save that was initiated under a resolved account but rejected with
+// ACCOUNT_MISMATCH (the session flipped before the write) is stored stamped
+// to that account: never unclaimed, so the new session's account cannot
+// adopt it, and the next reconciliation under the owning account uploads it.
+function createAccountScopedSave(job: Omit<SavedJob, 'id' | 'created_date'>, accountId: string): SavedJob {
+  const jobs = getLocalJobs();
+  const existing = jobs.find((j) => j.url === job.url && j.syncedTo === accountId);
+  if (existing) return existing;
+  const newJob: SavedJob = {
+    ...job,
+    id: crypto.randomUUID(),
+    created_date: new Date().toISOString(),
+    syncedTo: accountId,
+  };
+  jobs.push(newJob);
+  setLocalJobs(jobs);
+  return newJob;
+}
+
 // SavedJob operations
 export const savedJobsApi = {
   list: async (sortBy?: string): Promise<SavedJob[]> => {
       try {
+        // Resolve the account BEFORE the jobs request and bind the read to
+        // it: the two requests must observe the same session, or the overlay
+        // could mix one account's server rows with another account's local
+        // records (including private comments).
+        const accountId = await getAuthenticatedAccountId();
         const params = sortBy ? `?sort=${sortBy}` : '';
       const response = await fetch(`${API_BASE_URL}/saved-jobs${params}`, {
-        credentials: 'include'
+        credentials: 'include',
+        headers: accountId ? { 'X-Expected-User-Id': accountId } : undefined
       });
-      
+
       if (response.status === 401) {
         // Not authenticated: show only unclaimed guest saves - a record
         // synced to an account must not surface after logout.
@@ -120,8 +145,18 @@ export const savedJobsApi = {
         return jobs;
       }
       
+        if (response.status === 409 && await isAccountMismatch(response)) {
+          // The session flipped before the read reached the server: discard
+          // into the scoped local fallback rather than mixing accounts.
+          throw new Error('Account changed before the read');
+        }
         if (!response.ok) throw new Error('Failed to fetch');
         const serverJobs: SavedJob[] = await response.json();
+        // The read and the identity check must have seen the same session;
+        // if the account changed while the request was in flight, discard
+        // the result into the scoped local fallback below.
+        const afterRead = await getAuthenticatedAccountId();
+        if (afterRead !== accountId) throw new Error('Account changed mid-read');
         // Guest records whose upload has not completed stay visible alongside
         // account saves, marked pending - otherwise a failed reconciliation
         // looks like "No saved jobs yet" after sign-in. The overlay is scoped
@@ -129,7 +164,6 @@ export const savedJobsApi = {
         // sign-in on this browser) must not leak its details or private
         // comments here. When the account cannot be resolved, only unclaimed
         // guest records overlay - synced records still show from the server.
-        const accountId = await getAuthenticatedAccountId();
         const localJobs = getLocalJobs().filter(
           (j) => !j.syncedTo || (accountId !== null && j.syncedTo === accountId),
         );
@@ -171,19 +205,31 @@ export const savedJobsApi = {
   },
 
   create: async (job: Omit<SavedJob, 'id' | 'created_date'>): Promise<SavedJob> => {
+      // Resolve the account BEFORE the request and bind the save to it: with
+      // a shared session cookie, another tab signing into a different
+      // account must not receive this account's save.
+      const accountId = await getAuthenticatedAccountId();
       try {
         const response = await fetch(`${API_BASE_URL}/saved-jobs`, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: { 'Content-Type': 'application/json', ...(accountId ? { 'X-Expected-User-Id': accountId } : {}) },
         credentials: 'include',
           body: JSON.stringify(job)
         });
-      
+
+      if (response.status === 409 && await isAccountMismatch(response)) {
+        // The session flipped before the write: nothing was created. Keep
+        // the save stamped to the account that initiated it - never an
+        // unclaimed guest record the new session's account could adopt.
+        if (accountId) return createAccountScopedSave(job, accountId);
+        throw new Error('Account changed before the save');
+      }
+
       if (response.status === 401) {
         // Not authenticated - dedupe against unclaimed guest records only.
         return createLocalGuestSave(job);
       }
-      
+
         if (!response.ok) {
           if (response.status === 409) {
             // Job already exists, find and return it
@@ -206,14 +252,31 @@ export const savedJobsApi = {
   // lastUploaded, so the next reconciliation does not treat it as a dirty
   // edit and overwrite the newer account state.
   update: async (id: string, data: Partial<SavedJob>, url?: string): Promise<SavedJob | null> => {
+      // Same binding as delete(): resolve the account before the request so
+      // a mid-flight session flip is rejected instead of writing one
+      // account's edit under another.
+      const accountId = await getAuthenticatedAccountId();
       try {
         const response = await fetch(`${API_BASE_URL}/saved-jobs/${id}`, {
           method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
+          headers: { 'Content-Type': 'application/json', ...(accountId ? { 'X-Expected-User-Id': accountId } : {}) },
         credentials: 'include',
           body: JSON.stringify(data)
         });
-      
+
+      if (response.status === 409 && await isAccountMismatch(response)) {
+        // Nothing was written. Retain the edit on the local record scoped to
+        // the initiating account; the next reconciliation under that account
+        // pushes it to the server.
+        const jobs = getLocalJobs();
+        let index = accountId ? jobs.findIndex((j) => j.url === url && canMirrorToRecord(j, accountId)) : -1;
+        if (index === -1) index = jobs.findIndex((j) => j.id === id && accountId !== null && j.syncedTo === accountId);
+        if (index === -1) throw new Error('Account changed before the update');
+        jobs[index] = { ...jobs[index], ...data };
+        setLocalJobs(jobs);
+        return jobs[index];
+      }
+
       if (response.status === 401) {
         // Not authenticated - use localStorage
         const jobs = getLocalJobs();
@@ -226,7 +289,9 @@ export const savedJobsApi = {
       
         if (!response.ok) throw new Error('Failed to update');
         if (url) {
-          const accountId = await getAuthenticatedAccountId();
+          // The write was bound to the pre-resolved account, so it is the
+          // verified owner for the mirror too - no second identity lookup
+          // against a possibly flipped session.
           const jobs = getLocalJobs();
           const index = jobs.findIndex((j) => j.url === url && canMirrorToRecord(j, accountId));
           if (index !== -1) {
@@ -341,16 +406,22 @@ export const savedJobsApi = {
  * Returns true once the account durably reflects the guest's state (or has
  * nothing to gain), false when the merge could not complete.
  */
-async function mergeGuestDetailsIntoAccount(guest: SavedJob, accountId: string): Promise<boolean> {
+// Returns whether the account durably reflects the guest's state, plus the
+// existing account row id when there is one - the caller needs it for the
+// compensating delete when the local record was removed mid-flight.
+async function mergeGuestDetailsIntoAccount(
+  guest: SavedJob,
+  accountId: string,
+): Promise<{ ok: boolean; existingId: string | null }> {
   try {
     const listResponse = await fetch(`${API_BASE_URL}/saved-jobs`, {
       credentials: 'include',
       headers: { 'X-Expected-User-Id': accountId },
     });
-    if (!listResponse.ok) return false;
+    if (!listResponse.ok) return { ok: false, existingId: null };
     const accountJobs: SavedJob[] = await listResponse.json();
     const existing = accountJobs.find((j) => j.url === guest.url);
-    if (!existing) return true; // raced delete - nothing to preserve into
+    if (!existing) return { ok: true, existingId: null }; // raced delete - nothing to preserve into
     // A field changed locally since the last successful upload is an
     // unresolved edit and wins over the account copy (including clearing a
     // comment or unmarking an application). A field that was never uploaded
@@ -366,16 +437,16 @@ async function mergeGuestDetailsIntoAccount(guest: SavedJob, accountId: string):
     if (dirty.applied ? true : guest.applied && !existing.applied) merged.applied = guest.applied;
     if (dirty.applied_date ? true : guest.applied_date && !existing.applied_date) merged.applied_date = guest.applied_date;
     if (dirty.comments ? true : guest.comments && !existing.comments) merged.comments = guest.comments;
-    if (Object.keys(merged).length === 0) return true;
+    if (Object.keys(merged).length === 0) return { ok: true, existingId: existing.id };
     const updateResponse = await fetch(`${API_BASE_URL}/saved-jobs/${existing.id}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json', 'X-Expected-User-Id': accountId },
       credentials: 'include',
       body: JSON.stringify(merged),
     });
-    return updateResponse.ok;
+    return { ok: updateResponse.ok, existingId: updateResponse.ok ? existing.id : null };
   } catch {
-    return false;
+    return { ok: false, existingId: null };
   }
 }
 
@@ -608,6 +679,9 @@ async function runReconcileGuestSavedJobs(): Promise<number> {
         remaining.push(current);
         continue;
       }
+      // On a conflict, the pre-existing account row's id is needed below if
+      // the local record was deleted while this request was in flight.
+      let conflictRowId: string | null = null;
       if (response.status === 409) {
         if (await isAccountMismatch(response)) {
           // Keep this record and everything not yet attempted - but only
@@ -617,42 +691,55 @@ async function runReconcileGuestSavedJobs(): Promise<number> {
           remaining.push(...local.slice(local.indexOf(job)).filter((j) => liveIds.has(j.id)));
           break;
         }
-        const merged = await mergeGuestDetailsIntoAccount(current, accountId);
-        if (!merged) {
+        const mergeResult = await mergeGuestDetailsIntoAccount(current, accountId);
+        if (!mergeResult.ok) {
           remaining.push(current); // merge failed - keep for next time
           continue;
         }
+        conflictRowId = mergeResult.existingId;
       }
-      // If the session flipped while the request was in flight, the write
-      // may have landed under a different account: keep the record local and
-      // unstamped rather than recording it as synced to the old account.
+      // The write itself was account-bound: the server rejects a mismatched
+      // expected account BEFORE writing, so a session flip seen only now
+      // means the data DID land under `accountId`. Stamp the retained local
+      // record as synced to that account - leaving it unclaimed would let
+      // the new session's account adopt (and re-upload) another account's
+      // details and private comments.
       const afterWrite = await getAuthenticatedAccountId();
       if (afterWrite !== accountId) {
-        remaining.push(current);
+        const stamped = getLocalJobs().map((j) =>
+          j.id === job.id
+            ? { ...j, syncedTo: accountId, lastUploaded: { applied: record.applied, applied_date: record.applied_date, comments: record.comments } }
+            : j,
+        );
+        setLocalJobs(stamped);
         continue;
       }
       // The user may have deleted this record while its own upload was in
-      // flight: undo a fresh 2xx upload so the delete stays deleted.
+      // flight: the account must not keep a row the user just removed - for
+      // a fresh upload that is the created row, for a conflict the
+      // pre-existing account row.
       const stillLocal = getLocalJobs().find((j) => j.id === job.id);
       if (!stillLocal) {
+        let rowId: string | null = conflictRowId;
         if (response.ok) {
           const created: SavedJob | null = await response.json().catch(() => null);
-          if (created?.id) {
-            // If this compensating delete fails, the local record is already
-            // gone and nothing would retry it - persist the id so the next
-            // reconciliation removes the orphaned account row.
-            try {
-              const deleteResponse = await fetch(`${API_BASE_URL}/saved-jobs/${created.id}`, {
-                method: 'DELETE',
-                credentials: 'include',
-                headers: { 'X-Expected-User-Id': accountId },
-              });
-              if (!deleteResponse.ok && deleteResponse.status !== 404) {
-                rememberPendingDelete(accountId, created.id);
-              }
-            } catch {
-              rememberPendingDelete(accountId, created.id);
+          rowId = created?.id ?? null;
+        }
+        if (rowId) {
+          // If this compensating delete fails, the local record is already
+          // gone and nothing would retry it - persist the id so the next
+          // reconciliation removes the orphaned account row.
+          try {
+            const deleteResponse = await fetch(`${API_BASE_URL}/saved-jobs/${rowId}`, {
+              method: 'DELETE',
+              credentials: 'include',
+              headers: { 'X-Expected-User-Id': accountId },
+            });
+            if (!deleteResponse.ok && deleteResponse.status !== 404) {
+              rememberPendingDelete(accountId, rowId);
             }
+          } catch {
+            rememberPendingDelete(accountId, rowId);
           }
         }
         continue;
