@@ -44,6 +44,10 @@ test('core classifications', () => {
   assert.equal(deriveJobCategory('Senior Backend Engineer', null), 'software');
   assert.equal(deriveJobCategory('מהנדס/ת תוכנה RT', null), 'software');
   assert.equal(deriveJobCategory('C++ SW Engineer', null), 'software');
+  // \b never fires after '#' (non-word char), so 'c#\b' silently never
+  // matched - real live titles ('C# Developer', no department) fell to 'other'.
+  assert.equal(deriveJobCategory('C# Developer', null), 'software');
+  assert.equal(deriveJobCategory('Senior C# Engineer', null), 'software');
   assert.equal(deriveJobCategory('Data Engineer', null), 'data-ai');
   assert.equal(deriveJobCategory('חוקר/ת AI בכיר/ה', null), 'data-ai');
   assert.equal(deriveJobCategory('QA Automation Engineer', null), 'qa');
