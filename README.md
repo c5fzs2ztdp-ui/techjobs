@@ -13,7 +13,7 @@ The frontend reads the jobs payload from a plain JSON URL (no API needed):
 | Env var (build time) | Default | Purpose |
 | --- | --- | --- |
 | `VITE_JOBS_DATA_URL` | `https://raw.githubusercontent.com/c5fzs2ztdp-ui/techjobs/data/jobs.json` | Jobs payload feed. Point at your own published payload to use a different data source. |
-| `VITE_SUBMIT_COMPANY_URL` | `https://github.com/halleelyasaf/techjob_map` | Where the "Add Company" dialog sends contributors. |
+| `VITE_SUBMIT_COMPANY_URL` | `https://github.com/natifridman/techjobs` | Where the "Add Company" dialog sends contributors. |
 
 The payload format is produced by `scripts/convert_jobs.mjs` (see its
 regression tests in `scripts/convert_jobs.test.mjs`).
