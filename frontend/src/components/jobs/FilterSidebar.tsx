@@ -8,12 +8,9 @@ import { useMobileDialogAccessibility } from "@/hooks/useDialogAccessibility";
 import { EMPTY_FILTERS, type Filters } from "./filters";
 import { REGION_LABELS, CATEGORY_LABELS } from "./jobsData";
 
-const jobCategories = [
-  "software", "data-ai", "qa", "devops", "security", "product", "design",
-  "sales", "marketing", "hr", "finance", "operations-logistics",
-  "customer-support", "hardware-electronics", "mechanical-manufacturing",
-  "management", "admin", "other"
-];
+// Derived from the taxonomy (insertion order) so a new converter category
+// appears here automatically instead of silently missing from the filters.
+const jobCategories = Object.keys(CATEGORY_LABELS);
 
 const workModels = ["remote", "hybrid", "on-site"];
 
