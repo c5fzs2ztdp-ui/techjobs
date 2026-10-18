@@ -15,6 +15,8 @@ interface MockDatabase {
   users: MockTable;
   saved_jobs: MockTable;
   companies: MockTable;
+  alert_subscriptions: MockTable;
+  alert_state: MockTable;
 }
 
 interface SupabaseError {
@@ -38,6 +40,14 @@ const mockDb: MockDatabase = {
     data: [],
     uniqueConstraints: [['name']],
   },
+  alert_subscriptions: {
+    data: [],
+    uniqueConstraints: [['email'], ['unsubscribe_token']],
+  },
+  alert_state: {
+    data: [],
+    uniqueConstraints: [['key']],
+  },
 };
 
 // Helper to get table by name
@@ -54,6 +64,8 @@ export function clearMockDatabase(): void {
   mockDb.users.data = [];
   mockDb.saved_jobs.data = [];
   mockDb.companies.data = [];
+  mockDb.alert_subscriptions.data = [];
+  mockDb.alert_state.data = [];
 }
 
 // Check if inserting row would violate unique constraints
@@ -75,6 +87,7 @@ class MockQueryBuilder {
   private orderByAscending = true;
   private selectColumns: string | string[] = '*';
   private isSingle = false;
+  private isMaybeSingle = false;
   private updateData: Record<string, unknown> | null = null;
   private insertData: MockRow | MockRow[] | null = null;
   private isDelete = false;
@@ -126,6 +139,12 @@ class MockQueryBuilder {
 
   single(): MockQueryBuilder {
     this.isSingle = true;
+    return this;
+  }
+
+  maybeSingle(): MockQueryBuilder {
+    this.isSingle = true;
+    this.isMaybeSingle = true;
     return this;
   }
 
@@ -247,6 +266,12 @@ class MockQueryBuilder {
       // Handle SELECT
       let results = this.applyFilters(table.data);
       results = this.applyOrder(results);
+
+      if (this.isSingle && this.isMaybeSingle && results.length === 0) {
+        // maybeSingle(): zero rows is a null result, not an error
+        resolve({ data: null as T, error: null });
+        return;
+      }
 
       if (this.isSingle) {
         if (results.length === 0) {

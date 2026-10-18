@@ -7,6 +7,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { useMobileDialogAccessibility } from "@/hooks/useDialogAccessibility";
 import { EMPTY_FILTERS, type Filters } from "./filters";
 import { REGION_LABELS, CATEGORY_LABELS } from "./jobsData";
+import AlertSubscribe from "./AlertSubscribe";
 
 // Derived from the taxonomy (insertion order) so a new converter category
 // appears here automatically instead of silently missing from the filters.
@@ -145,6 +146,7 @@ export default function FilterSidebar({
           </fieldset>
         </div>
       </ScrollArea>
+      <AlertSubscribe />
     </aside>
   );
 

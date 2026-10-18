@@ -7,6 +7,7 @@ import pgSession from 'connect-pg-simple';
 import { Pool } from 'pg';
 import passport from './config/passport';
 import authRouter from './routes/auth';
+import alertsRouter from './routes/alerts';
 import savedJobsRouter from './routes/savedJobs';
 import companiesRouter from './routes/companies';
 import path from 'path';
@@ -99,6 +100,13 @@ app.use('/auth', authRouter);
 // API routes
 app.use('/api/saved-jobs', savedJobsRouter);
 app.use('/api/companies', companiesRouter);
+app.use('/api/alerts', alertsRouter);
+
+// Daily new-jobs alert: active only when explicitly enabled (requires the
+// 001_alert_subscriptions migration and SMTP_* env vars; see README).
+if (process.env.ALERTS_ENABLED === 'true') {
+  import('./jobs/alertScheduler').then(({ startAlertScheduler }) => startAlertScheduler());
+}
 
 // Serve frontend in production
 const publicPath = path.join(__dirname, '..', 'public');
