@@ -84,6 +84,17 @@ describe('parseJobsPayload fuzz', () => {
     }
   }, 60000);
 
+  it('dangerous URL schemes are dropped (javascript:/data:/vbscript:/file:)', () => {
+    for (const u of ['javascript:alert(1)', 'JavaScript:alert(1)', 'data:text/html,<script>1</script>', 'vbscript:x', 'file:///etc/passwd', 'ftp://x.co/1', '//evil.com/x', 'evil.com/x', '']) {
+      const p = parseJobsPayload({ schemaVersion: 1, jobs: [{ ...baseJob(), url: u }] });
+      expect(p.jobs.length).toBe(0);
+    }
+    for (const u of ['https://x.co/1', 'http://x.co/1', 'HTTPS://x.co/1']) {
+      const p = parseJobsPayload({ schemaVersion: 1, jobs: [{ ...baseJob(), url: u }] });
+      expect(p.jobs.length).toBe(1);
+    }
+  });
+
   it('cityLabels fuzz: only clean string values admitted', () => {
     const cases: unknown[] = [null, undefined, 'x', 7, [], {a: 7, b: 'ok', c: null, d: '\u202Ex'}, {'__proto__': 'x'}];
     for (const cl of cases) {
