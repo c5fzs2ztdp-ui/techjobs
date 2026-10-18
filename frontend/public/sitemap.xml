@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+  <url><loc>https://techjobsil.com/</loc><changefreq>hourly</changefreq><priority>1.0</priority></url>
+  <url><loc>https://techjobsil.com/jobs</loc><changefreq>hourly</changefreq><priority>0.9</priority></url>
+  <url><loc>https://techjobsil.com/companies</loc><changefreq>daily</changefreq><priority>0.7</priority></url>
+  <url><loc>https://techjobsil.com/map</loc><changefreq>weekly</changefreq><priority>0.5</priority></url>
+  <url><loc>https://techjobsil.com/privacy</loc><changefreq>yearly</changefreq><priority>0.1</priority></url>
+  <url><loc>https://techjobsil.com/terms</loc><changefreq>yearly</changefreq><priority>0.1</priority></url>
+  <url><loc>https://techjobsil.com/accessibility</loc><changefreq>yearly</changefreq><priority>0.1</priority></url>
+</urlset>
