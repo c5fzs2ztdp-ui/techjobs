@@ -94,6 +94,30 @@ describe('Jobs URL params', () => {
     await waitFor(() => expect(screen.queryByText('Product Designer')).toBeNull());
   });
 
+  it('clears the URL-derived category filter when the category parameter disappears', async () => {
+    mockFetch();
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    render(
+      <QueryClientProvider client={client}>
+        <MemoryRouter initialEntries={['/jobs?category=software']}>
+          <Routes>
+            <Route path="/jobs" element={<>
+              <Link to="/jobs">plain-jobs</Link>
+              <Jobs />
+            </>} />
+          </Routes>
+        </MemoryRouter>
+      </QueryClientProvider>
+    );
+
+    await waitFor(() => expect(screen.getByText('Backend Engineer')).toBeTruthy());
+    await waitFor(() => expect(screen.queryByText('Product Designer')).toBeNull()); // design job filtered out
+
+    fireEvent.click(screen.getByText('plain-jobs'));
+
+    await waitFor(() => expect(screen.getByText('Product Designer')).toBeTruthy()); // filter dropped
+  });
+
   it('clears the URL-derived city filter when the city parameter disappears', async () => {
     // Navigating from /jobs?city=Tel%20Aviv to plain /jobs must drop the
     // city filter, or the list stays filtered with no URL state for it.

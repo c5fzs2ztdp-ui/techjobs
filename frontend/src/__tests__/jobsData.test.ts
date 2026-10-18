@@ -47,6 +47,18 @@ describe('fetchJobsPayload normalization', () => {
     expect(job.regions).toEqual(['center']);
   });
 
+  it('neutralizes an unsafe singular city before dictionary lookups', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => payloadResponse({
+      schemaVersion: 1,
+      jobs: [{
+        company: 'A', title: 'Engineer', url: 'https://x/1', job_category: 'software',
+        city: 'constructor', cities: [], regions: [], technologies: [],
+      }],
+    })));
+    const payload = await fetchJobsPayload();
+    expect(payload.jobs[0].city).toBeNull();
+  });
+
   it('rejects a structurally incompatible payload instead of an empty board', async () => {
     vi.stubGlobal('fetch', vi.fn(async () => payloadResponse({})));
     await expect(fetchAllJobs()).rejects.toThrow('missing jobs array');

@@ -40,6 +40,11 @@ export default function Jobs() {
     // visible filter chip explaining why.
     if (initialCategoryParam && CATEGORY_LABELS[initialCategoryParam]) {
       setFilters(prev => ({ ...prev, jobCategories: [initialCategoryParam] }));
+    } else {
+      // Like the city param: navigating from /jobs?category=qa to plain
+      // /jobs must drop the filter, or the list stays filtered with no URL
+      // state explaining why.
+      setFilters(prev => (prev.jobCategories.length > 0 ? { ...prev, jobCategories: [] } : prev));
     }
     if (initialCity) {
       setFilters(prev => ({ ...prev, cities: [initialCity] }));
