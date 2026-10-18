@@ -159,6 +159,21 @@ test('automation contexts: manufacturing/hardware vs QA', () => {
   assert.equal(deriveJobCategory('Automation Engineer', null), 'other'); // ambiguous - never forced into QA
 });
 
+// Live-data gaps found in deep-review pass 2 (titles that fell to 'other').
+test('functional rule gaps from live feed audit', () => {
+  assert.equal(deriveJobCategory('SOC Analyst (L2/L3) and Security Advisor', null), 'security');
+  assert.equal(deriveJobCategory('Security Research Intern', null), 'security');
+  assert.equal(deriveJobCategory('UVM SystemVerilog Verification Engineer', null), 'hardware-electronics');
+  assert.equal(deriveJobCategory('Senior DFT Design Engineer', null), 'hardware-electronics');
+  assert.equal(deriveJobCategory('מתכנן.ת מערכות MEMS', null), 'hardware-electronics');
+  assert.equal(deriveJobCategory('ראש/ת מחלקת הנדסת מערכת אוויוניקה לחימושים', null), 'management');
+  assert.equal(deriveJobCategory('כלכלן/ית פרויקטים', null), 'finance');
+  assert.equal(deriveJobCategory('Planning and Control Economist', null), 'finance');
+  assert.equal(deriveJobCategory('Senior Product Analyst', null), 'product');
+  // SoC (silicon) must not be caught by the SOC (security operations) rule
+  assert.equal(deriveJobCategory('Senior SoC Verification Engineer', null), 'hardware-electronics');
+});
+
 test('every region-mapped city round-trips through normalizeCity with a Hebrew label', () => {
   // Guards the CITIES port against drifting from the region registry:
   // a region-mapped city the matcher does not know emits city: null in the feed.

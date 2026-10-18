@@ -165,16 +165,16 @@ export function normalizeCity(raw) {
 const TITLE_RULES = [
   // specific professions first (order matters, first match wins)
   ['hr', /\bhr\b|\bhrbp\b|human resources|recruit|talent (acquisition|sourc|partner)|people (operations|partner)|משאבי אנוש|כוח אדם|גיוס|מגייס/],
-  ['product', /product (manager|owner|lead|management)|group product|\bcpo\b|מנהל\/?\.?ת? מוצר|אחראי\/?\.?ת? מוצר/],
+  ['product', /product (manager|owner|lead|management|analyst)|group product|\bcpo\b|מנהל\/?\.?ת? מוצר|אחראי\/?\.?ת? מוצר/],
   // Explicit manufacturing/hardware automation contexts come before the
   // generic automation QA match (and before the \bai\b data-ai match).
   ['mechanical-manufacturing', /manufacturing automation|industrial automation/],
   ['hardware-electronics', /\b(vlsi|asic|fpga|silicon|cad|chip)\b[^,]*automation|automation[^,]*\b(vlsi|asic|fpga|silicon|cad|chip)\b/],
   ['qa', /\bqa\b|quality assurance|\bsdet\b|test automation|automation (test|testing)|\btest(s|ing)? engineer|בדיקות תוכנה|בודק\/?\.?ת? תוכנה/],
-  ['security', /cyber|infosec|appsec|devsecops|product security|security (engineer|researcher?|architect|analyst|consultant|expert)|penetration test|malware|vulnerabilit|threat (prevention|intelligence|hunt)|incident response|endpoint (security|protection|research)|סייבר|אבטחת מידע|אבטחת מערכות/],
+  ['security', /cyber|infosec|appsec|devsecops|product security|security (engineer|research(er)?|architect|analyst|consultant|expert|advisor)|\bsoc analyst|penetration test|malware|vulnerabilit|threat (prevention|intelligence|hunt)|incident response|endpoint (security|protection|research)|סייבר|אבטחת מידע|אבטחת מערכות/],
   ['devops', /devops|\bsre\b|site reliability|platform engineer|infrastructure engineer|finops|cloud (engineer|architect)|systems? administrator|\bsysadmin|network engineer|\bit (engineer|manager|specialist)|דבאופס|תשתיות (מחשוב|מידע|טכנולוג)|מנהל\/?\.?ת? מערכת|סיסטם/],
   ['data-ai', /data scien|data engineer|data analy|machine learning|deep learning|artificial intelligence|\bmlops\b|\bml (engineer|researcher)|\bai\b|data platform|algorithm|research scien|computer vision|\bnlp\b|big data|business intelligence|\bbi (developer|analyst|engineer)|דאטה|נתונים|למידת מכונה|בינה מלאכותית|אלגוריתמ/],
-  ['hardware-electronics', /hardware|fpga|asic|vlsi|embedded|firmware|\bsilicon\b|electronics|\bpcb\b|\brf engineer|board design|validation engineer|חומרה|אלקטרוניקה|מהנדס\/?\.?ת? מערכ|אינטגרציה|שילובים|תקשורת|ניווט/],
+  ['hardware-electronics', /hardware|fpga|asic|vlsi|embedded|firmware|\bsilicon\b|electronics|\bpcb\b|\brf engineer|board design|validation engineer|verification engineer|\bdft\b|\bmems\b|חומרה|אלקטרוניקה|מהנדס\/?\.?ת? מערכ|אינטגרציה|שילובים|תקשורת|ניווט/],
   ['mechanical-manufacturing', /mechanical|mechatronics|manufacturing|production (engineer|manager|operator|worker|line)|machinist|technician|maintenance|\bcnc\b|welder|electrician|industrial engineer|process engineer|quality (engineer|technician|inspector|systems|manager)|מכונות|מכאנ|מכונאי|טכנאי|תכן|מכני|מתקין|יצור|טכנולוג(\.?ית)?(?![א-ת])|technologist|אחזקה|ייצור|תעשייה וניהול|מהנדס\/?\.?ת? תעשייה|חשמלאי|רתך|מסגר|איכות|הנדסאי|מכטרוניקה|בקרת הינע/],
   ['design', /designer|\bux\b|\bui\b|graphic|motion design|מעצב|חוויית? משתמש|גרפיק/],
   // Specific support roles must match before the general account-manager
@@ -183,11 +183,11 @@ const TITLE_RULES = [
   ['sales', /sales|account executive|account manager|business development|\bbdr\b|\bsdr\b|pre-?sales|מכירות|פיתוח עסקי|מנהל\/?\.?ת? לקוחות|יועץ\/?\.?ת? מכירות/],
   ['customer-support', /customer (support|success|service|experience)|technical support|help ?desk|support (engineer|specialist|representative)|\btam\b|technical account manager|client services?|professional services|שירות לקוחות|נציג\/?\.?ת?( שירות| |$)|תמיכה|מוקד|הצלחת לקוח/],
   ['marketing', /marketing|growth (manager|marketing)|\bseo\b|content (writer|manager)|brand|demand generation|campaign|copywriter|social media|שיווק|משווק|מותג|קמפיין|דיגיטל/],
-  ['finance', /financ|controller|accountant|accounting|bookkeep|payroll|\bcfo\b|fp&a|auditor|treasury|כספים|הנהלת חשבונות|הנה"ח|רואה חשבון|רו"ח|חשב\/?\.?ת?|כלכלה|פיננס/],
+  ['finance', /financ|controller|accountant|accounting|bookkeep|payroll|\bcfo\b|fp&a|auditor|treasury|\beconomist\b|כספים|הנהלת חשבונות|הנה"ח|רואה חשבון|רו"ח|חשב\/?\.?ת?|כלכלה|כלכלן|פיננס/],
   ['operations-logistics', /operations|supply chain|logistics|warehouse|procurement|inventory|shipping|fleet|facilities|\bdriver\b|order management|לוגיסטיק|רכש|קניין|מחסנא|מחסן|אחסנה|הפצה|הובלה|שרשרת אספקה|תפעול|מלאי|מלגז|נהג/],
   ['admin', /administra|office manager|executive assistant|personal assistant|receptionist|secretary|clerical|אדמיניסטר|מזכיר|משרדי|פקיד|(^|[^א-ת])רכז(?=[\/ ]|$)/],
   ['software', /software|full.?stack|back.?end|front.?end|web (developer|engineer)|mobile (developer|engineer)|android (developer|engineer)|\bios (developer|engineer)|application (developer|engineer)|\bsw (engineer|developer)|c\+\+|\bjava\b|\bpython\b|\bgolang\b|\brust\b|\bkotlin\b|\bscala\b|\bphp\b|\bruby on rails\b|dotnet|\.net (developer|engineer)|\bc#|linux kernel|macos|\bsap\b|מתכנת|תוכנה|פיתוח תוכנה|מפתח\/?\.?ת?|פולסטאק/],
-  ['management', /vice president|\bvp\b|general manager|managing director|\bdirector\b|\bchief\b|\bteam lead\b|\btech(nical)? lead\b|\bgroup lead\b|ראש צוות|head of|group manager|department manager|project manager|program manager|\bpmo\b|delivery manager|scrum master|engineering manager|\bmanager\b|מנהל|ראש מחלקה|ראש תחום|סמנכ"ל|מנכ"ל|סגן נשיא/],
+  ['management', /vice president|\bvp\b|general manager|managing director|\bdirector\b|\bchief\b|\bteam lead\b|\btech(nical)? lead\b|\bgroup lead\b|ראש צוות|head of|group manager|department manager|ראש\/?\.?ת? מחלק|project manager|program manager|\bpmo\b|delivery manager|scrum master|engineering manager|\bmanager\b|מנהל|ראש מחלקה|ראש תחום|סמנכ"ל|מנכ"ל|סגן נשיא/],
 ];
 // Department is a strong signal when the title alone did not classify (EN + HE).
 const DEPT_RULES = [
