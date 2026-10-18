@@ -210,3 +210,31 @@ test('city matching uses word boundaries for ASCII names and aliases', () => {
   assert.equal(normalizeCity('Ramat-Gan (Tel-Aviv area), IL').city, 'Ramat Gan');
   assert.equal(normalizeCity('ירושלים').city, 'Jerusalem'); // Hebrew stays substring
 });
+
+// Districts are fallback-only: a concrete city beats a district label, but a
+// bare district location still maps (CodeRabbit pyDt).
+test('district labels lose to concrete cities', () => {
+  assert.equal(normalizeCity('Eilat, Southern District, Israel').city, 'Eilat');
+  assert.equal(normalizeCity('Beit HaEmek (Northern District), IL, IL').city, 'Beit HaEmek');
+  assert.equal(normalizeCity('ISR - Central District of Israel - Hod Hasharon').city, 'Hod HaSharon');
+  assert.equal(normalizeCity('דרום, Israel').city, 'Southern District');
+});
+
+// Explicit occupations outrank broad technology qualifiers (CodeRabbit pyDx).
+test('occupation rules outrank technology qualifiers', () => {
+  assert.equal(deriveJobCategory('AI Sales Specialist III, Google Cloud', null), 'sales');
+  assert.equal(deriveJobCategory('Senior Product Designer - Harmony AI', null), 'design');
+  assert.equal(deriveJobCategory('Enterprise Account Executive (Cyber)', null), 'sales');
+  assert.equal(deriveJobCategory('Growth Marketing Lead (AI-Native)', null), 'marketing');
+});
+
+// Engineering "designers" are hardware/mechanical roles, not design.
+test('engineering designers fall through to hardware/mechanical', () => {
+  assert.equal(deriveJobCategory('PCB Layout Designer', null), 'hardware-electronics');
+  assert.equal(deriveJobCategory('Logic Designer and FPGA Tech Lead', null), 'hardware-electronics');
+  assert.equal(deriveJobCategory('RFIC Designer', null), 'hardware-electronics');
+  assert.equal(deriveJobCategory('Senior Physical Design Engineer', null), 'hardware-electronics');
+  assert.equal(deriveJobCategory('Mechanical Designer', null), 'mechanical-manufacturing');
+  assert.equal(deriveJobCategory('Senior Product Designer', null), 'design');
+  assert.equal(deriveJobCategory('Senior Game Designer', null), 'design');
+});

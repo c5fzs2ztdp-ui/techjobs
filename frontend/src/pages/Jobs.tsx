@@ -75,7 +75,7 @@ export default function Jobs() {
     mutationFn: async (job: Job): Promise<SaveMutationResult> => {
       const existing = savedJobs.find(s => s.url === job.url);
       if (existing) {
-        await savedJobsApi.delete(existing.id);
+        await savedJobsApi.delete(existing.id, existing.url);
         return { action: 'removed', job };
       } else {
         await savedJobsApi.create({
@@ -114,7 +114,7 @@ export default function Jobs() {
         await savedJobsApi.update(existing.id, {
           applied: !existing.applied,
           applied_date: !existing.applied ? new Date().toISOString().split('T')[0] : undefined
-        });
+        }, existing.url);
         return { action: existing.applied ? 'unapplied' : 'applied', job };
       } else {
         await savedJobsApi.create({

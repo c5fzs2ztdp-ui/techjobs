@@ -77,7 +77,7 @@ export default function SavedJobs() {
   const appliedCount = savedJobs.filter(j => j.applied).length;
 
   const deleteMutation = useMutation({
-    mutationFn: (id: string) => savedJobsApi.delete(id),
+    mutationFn: ({ id, url }: { id: string; url?: string }) => savedJobsApi.delete(id, url),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['savedJobs'] });
       toast.success('Job removed from saved');
@@ -88,8 +88,8 @@ export default function SavedJobs() {
   });
 
   const updateMutation = useMutation({
-    mutationFn: ({ id, data }: { id: string; data: Partial<SavedJob> }) =>
-      savedJobsApi.update(id, data),
+    mutationFn: ({ id, data, url }: { id: string; data: Partial<SavedJob>; url?: string }) =>
+      savedJobsApi.update(id, data, url),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['savedJobs'] });
     },
@@ -105,7 +105,8 @@ export default function SavedJobs() {
       data: {
         applied: newApplied,
         applied_date: newApplied ? new Date().toISOString().split('T')[0] : undefined
-      }
+      },
+      url: job.url
     }, {
       onSuccess: () => {
         toast.success(newApplied ? 'Marked as applied!' : 'Unmarked as applied');
@@ -118,13 +119,14 @@ export default function SavedJobs() {
     setCommentText(job.comments || '');
   };
 
-  const saveComment = (jobId: string) => {
+  const saveComment = (job: SavedJob) => {
     const text = commentText;
     setEditingComment(null);
     setCommentText('');
     updateMutation.mutate({
-      id: jobId,
-      data: { comments: text }
+      id: job.id,
+      data: { comments: text },
+      url: job.url
     }, {
       onSuccess: () => {
         toast.success('Comment saved');
@@ -315,7 +317,7 @@ export default function SavedJobs() {
                         <Button
                           variant="ghost"
                           size="icon"
-                          onClick={() => deleteMutation.mutate(job.id)}
+                          onClick={() => deleteMutation.mutate({ id: job.id, url: job.url })}
                           disabled={deleteMutation.isPending}
                           className="text-warm-400 hover:text-red-500 hover:bg-red-50 disabled:opacity-50"
                         >
@@ -346,7 +348,7 @@ export default function SavedJobs() {
                             </Button>
                             <Button
                               size="sm"
-                              onClick={() => saveComment(job.id)}
+                              onClick={() => saveComment(job)}
                               disabled={updateMutation.isPending}
                               className="bg-iris-600 hover:bg-iris-700 disabled:opacity-50"
                             >

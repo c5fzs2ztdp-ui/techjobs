@@ -499,6 +499,56 @@ describe('savedJobsApi.delete on a pending local record', () => {
   });
 });
 
+describe('pending duplicate consistency (CodeRabbit pyDp)', () => {
+  const serverJob = {
+    id: 'server-7',
+    job_title: 'Engineer',
+    company: 'Acme',
+    url: 'http://example.com/job-7',
+    applied: false,
+    applied_date: null,
+    comments: '',
+    created_date: '2026-10-09T00:00:00.000Z',
+  };
+  const localDup = {
+    id: 'local-7',
+    job_title: 'Engineer',
+    company: 'Acme',
+    url: 'http://example.com/job-7',
+    applied: true,
+    applied_date: '2026-10-10',
+    comments: 'guest note',
+    created_date: '2026-10-09T00:00:00.000Z',
+  };
+
+  it('a successful server delete with url also retires the retained local duplicate', async () => {
+    server.use(http.delete('/api/saved-jobs/server-7', () => new HttpResponse(null, { status: 200 })));
+    localStorage.setItem('techjobs_saved_jobs', JSON.stringify([localDup]));
+
+    await expect(savedJobsApi.delete('server-7', 'http://example.com/job-7')).resolves.toBe(true);
+
+    // Without this, the next reconciliation would re-POST the duplicate and
+    // resurrect the deleted save.
+    expect(JSON.parse(localStorage.getItem('techjobs_saved_jobs') || '[]')).toHaveLength(0);
+  });
+
+  it('a successful server update with url syncs the local duplicate and stamps lastUploaded', async () => {
+    server.use(
+      http.put('/api/saved-jobs/server-7', async ({ request }) => {
+        const body = (await request.json()) as Record<string, unknown>;
+        return HttpResponse.json({ ...serverJob, ...body });
+      }),
+    );
+    localStorage.setItem('techjobs_saved_jobs', JSON.stringify([localDup]));
+
+    await savedJobsApi.update('server-7', { comments: 'newer account edit' }, 'http://example.com/job-7');
+
+    const [stored] = JSON.parse(localStorage.getItem('techjobs_saved_jobs') || '[]');
+    expect(stored.comments).toBe('newer account edit');
+    expect(stored.lastUploaded?.comments).toBe('newer account edit');
+  });
+});
+
 describe('corrupt localStorage resilience', () => {
   it('a corrupt saved-jobs blob backs itself up and starts clean instead of throwing', async () => {
     localStorage.setItem('techjobs_saved_jobs', '{not json!!');
