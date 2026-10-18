@@ -149,7 +149,7 @@ const JUNK_CITY = /https?:\/\/|www\.|\.co(m)?\b|careers/i;
 const DISTRICT_ENS = new Set(['Central District', 'Northern District', 'Southern District']);
 
 export function normalizeCity(raw) {
-  if (!raw) return { city: null, cityHe: null };
+  if (typeof raw !== 'string' || !raw) return { city: null, cityHe: null };
   const trimmed = raw.trim();
   if (NON_CITY.test(trimmed) || JUNK_CITY.test(trimmed)) return { city: null, cityHe: null };
   const lower = trimmed.toLowerCase();
@@ -218,13 +218,13 @@ const DEPT_RULES = [
   ['admin', /פקידות|מזכירות|אדמיניסטר|admin/],
 ];
 export function deriveJobCategory(title, department) {
-  const t = (title || '').toLowerCase();
+  const t = (typeof title === 'string' ? title : '').toLowerCase();
   let titleCat = null;
   for (const [cat, re] of TITLE_RULES) if (re.test(t)) { titleCat = cat; break; }
   // A specific title match wins. A generic 'management' match is refined by
   // the department when one is known (e.g. "content manager" + שיווק -> marketing).
   if (titleCat && titleCat !== 'management') return titleCat;
-  const d = (department || '').toLowerCase();
+  const d = (typeof department === 'string' ? department : '').toLowerCase();
   if (d) for (const [cat, re] of DEPT_RULES) if (re.test(d)) return cat;
   return titleCat || 'other';
 }
@@ -232,43 +232,63 @@ export function deriveJobCategory(title, department) {
 // --- Convert ---
 if (isMain) {
 
-const raw = JSON.parse(fs.readFileSync(inputPath, 'utf8'));
+let raw;
+try {
+  raw = JSON.parse(fs.readFileSync(inputPath, 'utf8'));
+} catch (e) {
+  console.error(`Input is not valid JSON: ${e.message}`);
+  process.exit(1);
+}
 if (!Array.isArray(raw)) { console.error('Input is not a JSON array'); process.exit(1); }
 
-const jobs = raw.map(j => {
-  const { city, cityHe } = normalizeCity(j.city || j.location);
+// A malformed row must never kill the whole publish: non-object records are
+// dropped (and counted) instead of crashing the conversion.
+const sourceRows = raw.filter(j => j !== null && typeof j === 'object' && !Array.isArray(j));
+const droppedRows = raw.length - sourceRows.length;
+if (droppedRows > 0) console.warn(`convert_jobs: dropped ${droppedRows} malformed row(s)`);
+const jobs = sourceRows.map(j => {
+  const { city, cityHe } = normalizeCity(
+    (typeof j.city === 'string' && j.city) || (typeof j.location === 'string' && j.location) || null,
+  );
   const cities = [...new Set([...(Array.isArray(j.cities) ? j.cities : []), city].filter(Boolean))];
   // Regions derive from every canonical city; explicit upstream annotations
   // are merged only when they are supported region slugs.
   const regions = deriveRegions(cities, j.regions, j.region);
+  // Non-string scalars are coerced to null: the renderer's parseJobsPayload
+  // drops rows missing required string fields, so a corrupted row degrades
+  // instead of breaking the payload contract. Bidi control characters are
+  // stripped here too (the renderer strips them again at its boundary): they
+  // never belong in job data and can visually spoof rendered text.
+  const BIDI = /[\u200E\u200F\u202A-\u202E\u2066-\u2069]/g;
+  const strOrNull = (v) => (typeof v === 'string' ? v.replace(BIDI, '') : null);
   return {
     // renderer-facing fields from the 21-field techjob_map schema
-    company: j.company ?? null,
-    title: j.title ?? null,
-    location: j.location ?? null,
-    url: j.url ?? null,
+    company: strOrNull(j.company),
+    title: strOrNull(j.title),
+    location: strOrNull(j.location),
+    url: strOrNull(j.url),
     city,
-    department: j.department ?? null,
-    description: j.description ?? null,
-    employmentType: j.employmentType ?? null,
-    workModel: j.workModel ?? null,
-    seniority: j.seniority ?? null,
-    technologies: Array.isArray(j.technologies) ? j.technologies : [],
-    postedAt: j.postedAt ?? null,
+    department: strOrNull(j.department),
+    description: strOrNull(j.description),
+    employmentType: strOrNull(j.employmentType),
+    workModel: strOrNull(j.workModel),
+    seniority: strOrNull(j.seniority),
+    technologies: Array.isArray(j.technologies) ? j.technologies.filter(t => typeof t === 'string').map(t => t.replace(BIDI, '')) : [],
+    postedAt: strOrNull(j.postedAt),
     // Ops/provenance fields (jobId, jobCode, source, verification, verifiedAt,
     // lastRefreshAttemptAt, lastRefreshError, locationSource) stay in the
     // source dataset - the site never renders them and they cost ~30% of the
     // payload over the wire.
-    firstSeenAt: j.firstSeenAt ?? null,
-    refreshState: j.refreshState ?? null,
-    closedAt: j.closedAt ?? null,
-    region: j.region ?? null,
+    firstSeenAt: strOrNull(j.firstSeenAt),
+    refreshState: strOrNull(j.refreshState),
+    closedAt: strOrNull(j.closedAt),
+    region: strOrNull(j.region),
     cities,
     regions,
     // site-specific derived fields
     cityHe,
     job_category: deriveJobCategory(j.title, j.department),
-    updated: j.postedAt || j.verifiedAt || j.firstSeenAt || null,
+    updated: strOrNull(j.postedAt) || strOrNull(j.verifiedAt) || strOrNull(j.firstSeenAt),
   };
 });
 
