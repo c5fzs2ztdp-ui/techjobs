@@ -12,7 +12,7 @@ import { EMPTY_FILTERS, type Filters } from "@/components/jobs/filters";
 import SearchHeader from "@/components/jobs/SearchHeader";
 import JobCard from "@/components/jobs/JobCard";
 import JobsLoader from "@/components/jobs/JobsLoader";
-import { displayCity, fetchJobsPayload, isClosed, JOBS_PAYLOAD_QUERY_KEY, selectCityLabels, selectSortedJobs, type Job } from "@/components/jobs/jobsData";
+import { CATEGORY_LABELS, displayCity, fetchJobsPayload, isClosed, JOBS_PAYLOAD_QUERY_KEY, selectCityLabels, selectSortedJobs, type Job } from "@/components/jobs/jobsData";
 import { savedJobsApi } from "@/api/storage";
 
 // Types for mutation results
@@ -35,7 +35,10 @@ export default function Jobs() {
   // Apply category/city from URL on mount. Categories are role-category
   // slugs from the jobs taxonomy (see CATEGORY_LABELS in jobsData).
   useEffect(() => {
-    if (initialCategoryParam) {
+    // Ignore a param that is not a real taxonomy slug or canonical city: an
+    // unknown value would silently filter the board to zero jobs with no
+    // visible filter chip explaining why.
+    if (initialCategoryParam && CATEGORY_LABELS[initialCategoryParam]) {
       setFilters(prev => ({ ...prev, jobCategories: [initialCategoryParam] }));
     }
     if (initialCity) {
@@ -159,6 +162,15 @@ export default function Jobs() {
     const citySet = new Set(jobs.flatMap(job => job.cities));
     return Array.from(citySet).sort((a, b) => (cityLabels[a] || a).localeCompare(cityLabels[b] || b));
   }, [jobs, cityLabels]);
+
+  // City params can only be checked once the payload's canonical city list
+  // is known; drop an unknown one so it cannot silently empty the board.
+  useEffect(() => {
+    if (!initialCity || Object.keys(cityLabels).length === 0) return;
+    if (!cityLabels[initialCity]) {
+      setFilters(prev => ({ ...prev, cities: prev.cities.filter(c => c !== initialCity) }));
+    }
+  }, [initialCity, cityLabels]);
 
   // Filter jobs
   const filteredJobs = useMemo(() => {
