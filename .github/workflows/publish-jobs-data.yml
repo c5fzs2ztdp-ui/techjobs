@@ -52,6 +52,19 @@ jobs:
             git rm -rf . >/dev/null 2>&1 || true
             cd ..
           }
+          # Never silently shrink the feed: refuse to publish when the new
+          # payload drops below the absolute floor or more than 10% below the
+          # currently published row count. Feed-health detects bad publishes
+          # hourly; this blocks them at the source.
+          node -e "
+            const fs = require('fs');
+            const next = JSON.parse(fs.readFileSync('site/public-data/jobs.json', 'utf8')).jobs.length;
+            let prev = 0;
+            try { prev = JSON.parse(fs.readFileSync('data-branch/jobs.json', 'utf8')).jobs.length; } catch {}
+            if (next < 5000) { console.error(\`refusing to publish \${next} rows (< 5000 floor)\`); process.exit(1); }
+            if (prev > 0 && next < prev * 0.9) { console.error(\`refusing to publish: shrink \${prev} -> \${next} (>10%)\`); process.exit(1); }
+            console.log(\`row-count guard ok: \${prev} -> \${next}\`);
+          "
           cp site/public-data/jobs.json data-branch/jobs.json
           cd data-branch
           git config user.name "github-actions[bot]"
