@@ -55,7 +55,7 @@ async function fetchWithTimeout(url, opts = {}) {
       ...opts,
       signal: ctrl.signal,
       redirect: 'follow',
-      headers: { 'User-Agent': 'TechJobsIL logo fetcher (favicon only)', ...opts.headers },
+      headers: { 'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36', ...opts.headers },
     });
   } finally { clearTimeout(t); }
 }
@@ -74,6 +74,8 @@ function sniffExt(p, buf) {
   if (p.endsWith('.png') && buf.readUInt32BE(0) === 0x89504e47) return 'png';
   if (p.endsWith('.svg') && buf.slice(0, 256).toString('latin1').includes('<svg')) return 'svg';
   if (p.endsWith('.ico') && buf[0] === 0 && buf[1] === 0 && buf[2] === 1 && buf[3] === 0) return 'ico';
+  if (p.endsWith('.webp') && buf.slice(0, 4).toString('latin1') === 'RIFF') return 'webp';
+  if (/\.jpe?g$/.test(p) && buf[0] === 0xff && buf[1] === 0xd8) return 'jpg';
   return null;
 }
 
@@ -116,7 +118,7 @@ async function homepageIconUrls(domain) {
     return urls
       .sort((a, b) => b.size - a.size)
       .map((u) => new URL(u.href, `https://${domain}/`).href)
-      .filter((u) => /\.(png|svg|ico)(\?|$)/i.test(u))
+      .filter((u) => /\.(png|svg|ico|webp|jpe?g)(\?|$)/i.test(u))
       .slice(0, 3);
   } catch { return []; }
 }
@@ -141,6 +143,33 @@ async function fetchLogo(domain) {
   }
   return null;
 }
+
+// Verified corporate domains for companies whose careers pages are hosted on
+// ATS platforms, so no own-domain is derivable from registry or job URLs.
+const DOMAIN_OVERRIDES = {
+  'Nvidia': 'nvidia.com',
+  'Israel Aerospace Industries': 'iai.co.il',
+  'Amazon': 'amazon.com',
+  'Mobileye': 'mobileye.com',
+  'Palo Alto Networks': 'paloaltonetworks.com',
+  'Apple': 'apple.com',
+  'Check Point Software Technologies': 'checkpoint.com',
+  'Strauss Group': 'strauss-group.com',
+  'Amdocs': 'amdocs.com',
+  'Qualcomm': 'qualcomm.com',
+  'Medtronic': 'medtronic.com',
+  'ARM': 'arm.com',
+  'Abbott': 'abbott.com',
+  'Airwallex': 'airwallex.com',
+  'AppsFlyer': 'appsflyer.com',
+  'Artlist': 'artlist.io',
+  '10bis': '10bis.co.il',
+  'Wix': 'wix.com',
+  'Riskified': 'riskified.com',
+  'Workato': 'workato.com',
+  'Buildots': 'buildots.com',
+  'Kela Technologies': 'kelacyber.com',
+};
 
 async function main() {
   const feedArg = process.argv[2];
@@ -178,6 +207,7 @@ async function main() {
   const targets = new Map(); // company -> domain
   let unresolved = [];
   for (const c of companies) {
+    if (DOMAIN_OVERRIDES[c]) { targets.set(c, DOMAIN_OVERRIDES[c]); continue; }
     const domains = [];
     const s = byNorm.get(norm(c));
     if (s) {
