@@ -26,7 +26,6 @@ export default function Companies() {
       name: string;
       jobs: typeof jobs;
       categories: Set<string>;
-      sizes: Set<string>;
       locations: Set<string>;
       latestUpdate: string;
     }>();
@@ -40,7 +39,6 @@ export default function Companies() {
           name: normalizedName,
           jobs: [],
           categories: new Set(),
-          sizes: new Set(),
           locations: new Set(),
           latestUpdate: job.updated || ''
         });
@@ -63,7 +61,6 @@ export default function Companies() {
       .map(c => ({
         ...c,
         categories: Array.from(c.categories),
-        sizes: Array.from(c.sizes),
         locations: Array.from(c.locations),
         jobCount: c.jobs.length
       }))

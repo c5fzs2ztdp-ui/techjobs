@@ -9,7 +9,6 @@ import CompanyLogo from "@/components/CompanyLogo";
 interface CompanyData {
   name: string;
   jobCount: number;
-  sizes: string[];
   locations: string[];
   categories: string[];
 }
