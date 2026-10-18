@@ -26,6 +26,10 @@ export interface SavedJob {
    * (account copy wins ties). Stripped before any server payload.
    */
   lastUploaded?: { applied?: boolean; applied_date?: string; comments?: string };
+  // The account id this record was synced to. Pending sync data belongs to
+  // that account: another sign-in on the same browser must not receive (or
+  // clear) it. Absent on genuinely unclaimed guest saves.
+  syncedTo?: string;
 }
 
 export interface Company {
@@ -219,8 +223,12 @@ export const savedJobsApi = {
       } catch (error) {
         console.error('Backend error, falling back to localStorage:', error);
     const jobs = getLocalJobs();
-    const index = jobs.findIndex(j => j.id === id);
-    if (index === -1) return null;
+    let index = jobs.findIndex(j => j.id === id);
+    // The displayed account row carries the server id while a retained local
+    // duplicate has a different id: fall back to the job URL so the edit is
+    // retained locally for the next reconciliation instead of being lost.
+    if (index === -1 && url) index = jobs.findIndex((j) => j.url === url);
+    if (index === -1) throw error; // nowhere to retain the edit - reject the mutation
     jobs[index] = { ...jobs[index], ...data };
     setLocalJobs(jobs);
     return jobs[index];
@@ -254,9 +262,11 @@ export const savedJobsApi = {
           if (filtered.length < jobs.length) setLocalJobs(filtered);
         }
         if (response.status === 404) {
-          // Unknown to the server: remove a pending local record if it is one.
+          // Confirmed absent for this account: remove a pending local record
+          // by id, and any retained local duplicate of the same job by URL,
+          // or the next reconciliation recreates the deleted save.
           const jobs = getLocalJobs();
-          const filtered = jobs.filter(j => j.id !== id);
+          const filtered = jobs.filter((j) => j.id !== id && (!url || j.url !== url));
           if (filtered.length < jobs.length) { setLocalJobs(filtered); return true; }
         }
         return response.ok;
@@ -326,43 +336,64 @@ async function mergeGuestDetailsIntoAccount(guest: SavedJob): Promise<boolean> {
  * upload failed stay in localStorage for the next reconciliation attempt.
  */
 // Sync metadata must not take part in the before/after upload comparison.
-function stripSyncMeta(job: SavedJob): Omit<SavedJob, 'lastUploaded'> {
-  const { lastUploaded, ...rest } = job;
+function stripSyncMeta(job: SavedJob): Omit<SavedJob, 'lastUploaded' | 'syncedTo'> {
+  const { lastUploaded, syncedTo, ...rest } = job;
   void lastUploaded;
+  void syncedTo;
   return rest;
 }
 
 // A compensating DELETE that fails (5xx/network) must not be forgotten: the
 // local record is already gone, so without a retry the account row would
-// resurrect the deleted save on the next sync. Failed ids persist here and
-// reconciliation retries them until the server confirms the row is absent.
+// resurrect the deleted save on the next sync. Failed ids persist here,
+// scoped to the account that created the row - a 404 under a different
+// account must not clear another account's pending deletion.
 const PENDING_DELETES_KEY = 'techjobs_pending_saved_job_deletes';
 
-function getPendingDeletes(): string[] {
+function getPendingDeleteMap(): { map: Record<string, string[]>; legacy: string[] } {
   try {
     const raw = localStorage.getItem(PENDING_DELETES_KEY);
-    const parsed: unknown = raw ? JSON.parse(raw) : [];
-    return Array.isArray(parsed) ? parsed.filter((x): x is string => typeof x === 'string') : [];
+    if (!raw) return { map: {}, legacy: [] };
+    const parsed: unknown = JSON.parse(raw);
+    if (Array.isArray(parsed)) {
+      // Pre-scoping format; attributed to the current account at flush time.
+      return { map: {}, legacy: parsed.filter((x): x is string => typeof x === 'string') };
+    }
+    if (parsed && typeof parsed === 'object') {
+      const map: Record<string, string[]> = {};
+      for (const [k, v] of Object.entries(parsed as Record<string, unknown>)) {
+        if (Array.isArray(v)) map[k] = v.filter((x): x is string => typeof x === 'string');
+      }
+      return { map, legacy: [] };
+    }
   } catch {
-    return [];
+    // fall through to empty
   }
+  return { map: {}, legacy: [] };
 }
 
-function setPendingDeletes(ids: string[]): void {
-  if (ids.length === 0) {
+function setPendingDeleteMap(map: Record<string, string[]>): void {
+  const clean = Object.fromEntries(Object.entries(map).filter(([, v]) => v.length > 0));
+  if (Object.keys(clean).length === 0) {
     localStorage.removeItem(PENDING_DELETES_KEY);
   } else {
-    localStorage.setItem(PENDING_DELETES_KEY, JSON.stringify(ids));
+    localStorage.setItem(PENDING_DELETES_KEY, JSON.stringify(clean));
   }
 }
 
-function rememberPendingDelete(id: string): void {
-  const ids = getPendingDeletes();
-  if (!ids.includes(id)) setPendingDeletes([...ids, id]);
+function rememberPendingDelete(accountId: string, id: string): void {
+  const { map, legacy } = getPendingDeleteMap();
+  const owned = [...(map[accountId] ?? []), ...legacy];
+  if (!owned.includes(id)) owned.push(id);
+  map[accountId] = owned;
+  setPendingDeleteMap(map);
 }
 
-async function flushPendingDeletes(): Promise<void> {
-  const ids = getPendingDeletes();
+async function flushPendingDeletes(accountId: string): Promise<void> {
+  const { map, legacy } = getPendingDeleteMap();
+  // Legacy unscoped entries were created under the then-active account; the
+  // current account is the best owner guess.
+  const ids = [...(map[accountId] ?? []), ...legacy];
   if (ids.length === 0) return;
   const remaining: string[] = [];
   for (const id of ids) {
@@ -377,7 +408,22 @@ async function flushPendingDeletes(): Promise<void> {
       remaining.push(id);
     }
   }
-  setPendingDeletes(remaining);
+  map[accountId] = remaining;
+  setPendingDeleteMap(map);
+}
+
+// Pending sync data is scoped to the authenticated account that owns it, so
+// a sign-in as another user on the same browser never receives or clears
+// the previous account's saves.
+async function getAuthenticatedAccountId(): Promise<string | null> {
+  try {
+    const response = await fetch(`${API_BASE_URL}/auth/me`, { credentials: 'include' });
+    if (!response.ok) return null;
+    const state: { authenticated?: boolean; user?: { id?: string } | null } = await response.json();
+    return state.authenticated && state.user?.id ? state.user.id : null;
+  } catch {
+    return null;
+  }
 }
 
 // Login, the Saved Jobs page and the Retry sync action can all trigger a
@@ -419,9 +465,11 @@ async function doReconcileGuestSavedJobs(): Promise<number> {
 }
 
 async function runReconcileGuestSavedJobs(): Promise<number> {
+  const accountId = await getAuthenticatedAccountId();
+  if (!accountId) return 0; // no account to sync into; retried after sign-in
   // Retry account-row deletions that failed on earlier runs first; they are
   // independent of the local queue and must survive it being empty.
-  await flushPendingDeletes();
+  await flushPendingDeletes(accountId);
   const local = getLocalJobs();
   if (local.length === 0) return 0;
   const remaining: SavedJob[] = [];
@@ -433,6 +481,9 @@ async function runReconcileGuestSavedJobs(): Promise<number> {
     // deleted record must not be resurrected on the account.
     const current = getLocalJobs().find((j) => j.id === job.id);
     if (!current) continue;
+    // A save already synced to a different account (an earlier sign-in on
+    // this browser) is left untouched instead of duplicating into this one.
+    if (current.syncedTo && current.syncedTo !== accountId) continue;
     // The server assigns its own id/created_date; everything else
     // (including applied state, dates and comments) is preserved. Built
     // from the live record so edits made before this item's turn upload too.
@@ -487,10 +538,10 @@ async function runReconcileGuestSavedJobs(): Promise<number> {
                 credentials: 'include',
               });
               if (!deleteResponse.ok && deleteResponse.status !== 404) {
-                rememberPendingDelete(created.id);
+                rememberPendingDelete(accountId, created.id);
               }
             } catch {
-              rememberPendingDelete(created.id);
+              rememberPendingDelete(accountId, created.id);
             }
           }
         }
@@ -501,7 +552,7 @@ async function runReconcileGuestSavedJobs(): Promise<number> {
       // tell a later local edit apart from never-uploaded guest data.
       const stamped = getLocalJobs().map((j) =>
         j.id === job.id
-          ? { ...j, lastUploaded: { applied: record.applied, applied_date: record.applied_date, comments: record.comments } }
+          ? { ...j, syncedTo: accountId, lastUploaded: { applied: record.applied, applied_date: record.applied_date, comments: record.comments } }
           : j,
       );
       setLocalJobs(stamped);

@@ -714,7 +714,7 @@ describe('reconcileGuestSavedJobs - pending compensating deletes', () => {
 
     await reconcileGuestSavedJobs();
 
-    expect(JSON.parse(localStorage.getItem('techjobs_pending_saved_job_deletes') || '[]')).toEqual(['server-9']);
+    expect(JSON.parse(localStorage.getItem('techjobs_pending_saved_job_deletes') || '{}')).toEqual({ 'user-123': ['server-9'] });
   });
 
   it('retries pending deletes until the server confirms absence', async () => {
@@ -731,7 +731,7 @@ describe('reconcileGuestSavedJobs - pending compensating deletes', () => {
 
     await reconcileGuestSavedJobs(); // 500: stays pending
     expect(deletes).toBe(1);
-    expect(JSON.parse(localStorage.getItem('techjobs_pending_saved_job_deletes') || '[]')).toEqual(['server-9']);
+    expect(JSON.parse(localStorage.getItem('techjobs_pending_saved_job_deletes') || '{}')).toEqual({ 'user-123': ['server-9'] });
 
     await reconcileGuestSavedJobs(); // 200: cleared
     expect(deletes).toBe(2);
@@ -747,6 +747,87 @@ describe('reconcileGuestSavedJobs - pending compensating deletes', () => {
     await reconcileGuestSavedJobs();
 
     expect(localStorage.getItem('techjobs_pending_saved_job_deletes')).toBeNull();
+  });
+});
+
+describe('account scoping and edit retention', () => {
+  beforeEach(() => {
+    localStorage.clear();
+  });
+
+  it('does not touch pending deletions owned by another account', async () => {
+    // A 404 (or any result) under the current account must not clear a
+    // pending deletion that belongs to a different account's row.
+    let deletes = 0;
+    server.use(
+      http.delete('/api/saved-jobs/srv-8', () => { deletes += 1; return new HttpResponse(null, { status: 404 }); })
+    );
+    localStorage.setItem('techjobs_pending_saved_job_deletes', JSON.stringify({ 'other-user': ['srv-8'] }));
+
+    await reconcileGuestSavedJobs(); // signed in as user-123 (default mock)
+
+    expect(deletes).toBe(0);
+    expect(localStorage.getItem('techjobs_pending_saved_job_deletes')).toBe(JSON.stringify({ 'other-user': ['srv-8'] }));
+  });
+
+  it('does not re-upload a save already synced to another account', async () => {
+    let posts = 0;
+    server.use(
+      http.post('/api/saved-jobs', () => { posts += 1; return HttpResponse.json({ id: 'srv-1' }, { status: 201 }); })
+    );
+    localStorage.setItem('techjobs_saved_jobs', JSON.stringify([{
+      id: 'local-1', job_title: 'Guest Job', company: 'Guest Corp', url: 'http://example.com/job-1',
+      applied: false, applied_date: null, comments: 'synced under A', created_date: '2026-10-09T00:00:00.000Z',
+      syncedTo: 'other-user',
+      lastUploaded: { applied: false, applied_date: null, comments: 'synced under A' },
+    }]));
+
+    await reconcileGuestSavedJobs();
+
+    expect(posts).toBe(0);
+    expect(JSON.parse(localStorage.getItem('techjobs_saved_jobs') || '[]')).toHaveLength(1);
+  });
+
+  it('retains a failed account edit on the local duplicate found by URL', async () => {
+    // The account row shows the server id; the retained local duplicate has
+    // a different id. A failed PUT must still keep the edit locally.
+    server.use(
+      http.put('/api/saved-jobs/server-1', () => new HttpResponse(null, { status: 500 }))
+    );
+    localStorage.setItem('techjobs_saved_jobs', JSON.stringify([{
+      id: 'local-1', job_title: 'Guest Job', company: 'Guest Corp', url: 'http://example.com/job-1',
+      applied: false, applied_date: null, comments: 'old', created_date: '2026-10-09T00:00:00.000Z',
+    }]));
+
+    const updated = await savedJobsApi.update('server-1', { comments: 'new comment' }, 'http://example.com/job-1');
+
+    expect(updated?.comments).toBe('new comment');
+    const stored = JSON.parse(localStorage.getItem('techjobs_saved_jobs') || '[]');
+    expect(stored[0].comments).toBe('new comment');
+  });
+
+  it('rejects the mutation when a failed edit has nowhere local to go', async () => {
+    server.use(
+      http.put('/api/saved-jobs/server-1', () => new HttpResponse(null, { status: 500 }))
+    );
+    await expect(savedJobsApi.update('server-1', { comments: 'x' })).rejects.toThrow();
+  });
+
+  it('a 404 delete retires the retained local duplicate by URL', async () => {
+    // Another tab already deleted the account row; the 404 must also remove
+    // the retained local duplicate or the next reconciliation recreates it.
+    server.use(
+      http.delete('/api/saved-jobs/server-1', () => new HttpResponse(null, { status: 404 }))
+    );
+    localStorage.setItem('techjobs_saved_jobs', JSON.stringify([{
+      id: 'local-1', job_title: 'Guest Job', company: 'Guest Corp', url: 'http://example.com/job-1',
+      applied: false, applied_date: null, comments: '', created_date: '2026-10-09T00:00:00.000Z',
+    }]));
+
+    const ok = await savedJobsApi.delete('server-1', 'http://example.com/job-1');
+
+    expect(ok).toBe(true);
+    expect(JSON.parse(localStorage.getItem('techjobs_saved_jobs') || '[]')).toEqual([]);
   });
 });
 

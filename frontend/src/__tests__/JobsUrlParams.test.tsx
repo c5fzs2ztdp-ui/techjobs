@@ -72,6 +72,28 @@ describe('Jobs URL params', () => {
     expect(screen.queryByText('Product Designer')).toBeNull();
   });
 
+  it('keeps a valid city param that has no cityLabels translation', async () => {
+    // cityLabels is an optional translation table that can lag new cities;
+    // validation must use the canonical cities in the payload instead.
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.includes('/api/saved-jobs')) {
+        return { ok: false, status: 401, json: async () => ({}) } as Response;
+      }
+      return { ok: true, json: async () => ({
+        schemaVersion: 1, updatedAt: '2026-10-18T00:00:00Z', count: 2,
+        cityLabels: { 'Tel Aviv': 'תל אביב' }, // Ashdod intentionally unlabeled
+        jobs: [
+          { company: 'A', title: 'Backend Engineer', url: 'https://x/1', job_category: 'software', cities: ['Ashdod'], updated: '2026-10-17' },
+          { company: 'B', title: 'Product Designer', url: 'https://x/2', job_category: 'design', cities: ['Tel Aviv'], updated: '2026-10-16' },
+        ],
+      }) } as Response;
+    }));
+    renderJobs('/jobs?city=Ashdod');
+    await waitFor(() => expect(screen.getByText('Backend Engineer')).toBeTruthy());
+    await waitFor(() => expect(screen.queryByText('Product Designer')).toBeNull());
+  });
+
   it('clears the URL-derived city filter when the city parameter disappears', async () => {
     // Navigating from /jobs?city=Tel%20Aviv to plain /jobs must drop the
     // city filter, or the list stays filtered with no URL state for it.

@@ -266,3 +266,25 @@ test('foreign-only listing detection', () => {
   assert.equal(isForeignOnlyListing({ location: 'Tel Aviv' }), false);
   assert.equal(isForeignOnlyListing({ location: null }), false);
 });
+
+// A district suffix must not override a concrete city in the same string.
+test('district suffix does not override a concrete city', () => {
+  assert.equal(normalizeCity('Herzliya, Tel Aviv District, Israel').city, 'Herzliya');
+  assert.equal(normalizeCity('Acre, Haifa District, Israel').city, 'Acre');
+  assert.equal(normalizeCity('הרצליה, מחוז תל אביב').city, 'Herzliya');
+  assert.equal(normalizeCity('Tel Aviv District, Israel').city, null);
+});
+
+// Explicit hardware occupations stay out of qa/other.
+test('hardware occupation titles', () => {
+  assert.equal(deriveJobCategory('IC Digital Test Engineer', null), 'hardware-electronics');
+  assert.equal(deriveJobCategory('Logic Design Engineer', null), 'hardware-electronics');
+  assert.equal(deriveJobCategory('מהנדס/ת חשמל למערכות הספק', null), 'hardware-electronics');
+});
+
+// Structured canonical locations beat a raw foreign location string.
+test('structured Israeli cities beat a raw foreign location', () => {
+  assert.equal(isForeignOnlyListing({ location: 'New York, United States', cities: ['Tel Aviv'] }), false);
+  assert.equal(isForeignOnlyListing({ city: 'Tel Aviv', location: 'New York, United States' }), false);
+  assert.equal(isForeignOnlyListing({ location: 'New York, United States', cities: [] }), true);
+});
