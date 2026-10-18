@@ -306,7 +306,20 @@ function stripSyncMeta(job: SavedJob): Omit<SavedJob, 'lastUploaded'> {
   return rest;
 }
 
-export async function reconcileGuestSavedJobs(): Promise<number> {
+// Login, the Saved Jobs page and the Retry sync action can all trigger a
+// reconciliation at the same time. Two overlapping runs interleave their
+// localStorage reads/writes; sharing one in-flight run keeps them convergent.
+let reconcileInFlight: Promise<number> | null = null;
+
+export function reconcileGuestSavedJobs(): Promise<number> {
+  if (reconcileInFlight) return reconcileInFlight;
+  reconcileInFlight = doReconcileGuestSavedJobs().finally(() => {
+    reconcileInFlight = null;
+  });
+  return reconcileInFlight;
+}
+
+async function doReconcileGuestSavedJobs(): Promise<number> {
   const local = getLocalJobs();
   if (local.length === 0) return 0;
   const remaining: SavedJob[] = [];
