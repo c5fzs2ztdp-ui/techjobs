@@ -102,4 +102,27 @@ describe('guest gate', () => {
     await waitFor(() => expect(screen.getByText('Engineer 0')).toBeTruthy());
     expect(screen.queryByRole('dialog')).toBeNull();
   });
+
+  it('still renders the board when browser storage is blocked', async () => {
+    // Reading window.localStorage itself throws SecurityError when storage
+    // is fully blocked; the gate must fall back instead of crashing.
+    vi.spyOn(window, 'localStorage', 'get').mockImplementation(() => {
+      throw new DOMException('Access is denied for this document.', 'SecurityError');
+    });
+    mockFetch(15, false);
+    renderJobs();
+    await waitFor(() => expect(screen.getByText('Engineer 0')).toBeTruthy());
+    expect(screen.getByText('Engineer 9')).toBeTruthy();
+    expect(screen.queryByText('Something went wrong')).toBeNull();
+  });
+
+  it('constrains the blocking modal to the viewport and makes it scrollable', async () => {
+    window.localStorage.setItem(GUEST_GATE_START_KEY, String(Date.now() - 31_000));
+    mockFetch(15, false);
+    renderJobs();
+    await waitFor(() => expect(screen.getByRole('dialog')).toBeTruthy());
+    const dialog = screen.getByRole('dialog');
+    expect(dialog.className).toContain('overflow-y-auto');
+    expect(dialog.className).toContain('max-h-');
+  });
 });

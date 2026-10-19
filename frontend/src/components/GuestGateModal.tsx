@@ -34,7 +34,7 @@ export default function GuestGateModal() {
         aria-modal="true"
         aria-labelledby="guest-gate-title"
         aria-describedby="guest-gate-desc"
-        className="bg-white rounded-2xl shadow-xl max-w-md w-full p-8 text-center space-y-5"
+        className="bg-white rounded-2xl shadow-xl max-w-md w-full max-h-[calc(100vh-2rem)] overflow-y-auto p-8 text-center space-y-5"
       >
         <div className="mx-auto w-14 h-14 rounded-full bg-iris-100 flex items-center justify-center">
           <Lock className="w-7 h-7 text-iris-600" aria-hidden="true" />

@@ -19,9 +19,21 @@ export function isCrawler(userAgent: string): boolean {
   return CRAWLER_UA.test(userAgent);
 }
 
+// When storage is fully blocked, even reading window.localStorage throws
+// (SecurityError), so the property is accessed inside the guarded path below
+// rather than by the caller.
+function safeLocalStorage(): Storage | null {
+  try {
+    return window.localStorage;
+  } catch {
+    return null;
+  }
+}
+
 // Timer anchors at the guest's first visit and persists across navigation
 // and refreshes (localStorage), so a reload does not reset the clock.
-function readGateStart(storage: Storage, now: number): number {
+function readGateStart(storage: Storage | null, now: number): number {
+  if (!storage) return now;
   try {
     const raw = storage.getItem(GUEST_GATE_START_KEY);
     if (raw) {
@@ -58,7 +70,7 @@ export function useGuestGate(timerActive = true): GuestGateState {
   /* eslint-disable react-hooks/purity -- intentional one-time side effect:
      records the guest's first-visit timestamp in localStorage. */
   const start = useMemo(
-    () => (isGuest && timerActive ? readGateStart(window.localStorage, Date.now()) : null),
+    () => (isGuest && timerActive ? readGateStart(safeLocalStorage(), Date.now()) : null),
     [isGuest, timerActive]
   );
   /* eslint-enable react-hooks/purity */
