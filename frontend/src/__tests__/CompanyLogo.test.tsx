@@ -31,4 +31,13 @@ describe('CompanyLogo', () => {
     const { container } = render(<CompanyLogo name="" />);
     expect(container.firstChild).toBeNull();
   });
+
+  it('resets the error fallback when the logo target changes', () => {
+    const { rerender } = render(<CompanyLogo name="Acme" logoUrl="/logos/does-not-exist.png" />);
+    fireEvent.error(screen.getByAltText('Acme logo'));
+    expect(screen.queryByAltText('Acme logo')).toBeNull();
+
+    rerender(<CompanyLogo name="Acme" logoUrl="/logos/now-exists.png" />);
+    expect(screen.getByAltText('Acme logo').tagName).toBe('IMG');
+  });
 });
