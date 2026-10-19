@@ -9,9 +9,9 @@ import { createPageUrl } from "@/utils";
 
 import FilterSidebar from "@/components/jobs/FilterSidebar";
 import type { Filters } from "@/components/jobs/filters";
+import { filtersFromParams, filtersToParams } from "@/components/jobs/filterUrl";
 import SearchHeader from "@/components/jobs/SearchHeader";
 import JobCard from "@/components/jobs/JobCard";
-import { filtersFromParams, filtersToParams } from "@/components/jobs/filterUrl";
 import JobsLoader from "@/components/jobs/JobsLoader";
 import { displayCity, fetchJobsPayload, isClosed, JOBS_PAYLOAD_QUERY_KEY, selectCityLabels, selectSortedJobs, type Job } from "@/components/jobs/jobsData";
 import { savedJobsApi } from "@/api/storage";
