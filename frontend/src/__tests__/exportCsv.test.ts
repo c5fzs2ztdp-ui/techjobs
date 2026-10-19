@@ -40,6 +40,19 @@ describe('jobsToCsv', () => {
     expect(row).toBe('Engineer,Acme,,tel-aviv-gush-dan,Software,,full-time,,2026-10-01,2026-10-18,https://x.example/1');
   });
 
+  it('neutralizes spreadsheet formula injection in feed-controlled cells', () => {
+    for (const evil of ['=1+1', '+SUM(A1)', '-2+3', '@cmd', '\t=1+1', '  =cmd|"/c calc"!A1']) {
+      const csv = jobsToCsv([job({ title: evil })]);
+      const cell = csv.slice(1).split('\r\n')[1].split(',')[0];
+      // the neutralizing quote is the first character, inside RFC 4180
+      // quoting when the value itself needs quoting
+      expect(cell.replace(/^"/, '').startsWith("'")).toBe(true);
+    }
+    // ordinary leading-dash-free text stays untouched
+    const csv = jobsToCsv([job({ title: 'Senior Dev' })]);
+    expect(csv.slice(1).split('\r\n')[1].split(',')[0]).toBe('Senior Dev');
+  });
+
   it('returns header only for an empty list', () => {
     const csv = jobsToCsv([]);
     expect(csv.slice(1).split('\r\n')).toHaveLength(2);

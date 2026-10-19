@@ -16,7 +16,12 @@ const HEADERS = [
 ];
 
 function csvCell(value: string | null | undefined): string {
-  const v = value ?? "";
+  let v = value ?? "";
+  // Formula-injection guard: spreadsheet apps execute a cell whose first
+  // non-whitespace character is = + - or @ (including after tabs/CRs) as a
+  // formula. Job fields are feed-controlled, so neutralize them with a
+  // leading single quote before RFC 4180 quoting.
+  if (/^[\t\r ]*[=+\-@]/.test(v)) v = `'${v}`;
   return /[",\r\n]/.test(v) ? `"${v.replace(/"/g, '""')}"` : v;
 }
 
