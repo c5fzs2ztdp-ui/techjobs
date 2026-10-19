@@ -2,6 +2,7 @@ import { lazy, Suspense, useEffect } from 'react';
 import { BrowserRouter as Router, Routes, Route, useLocation } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import ErrorBoundary from '@/components/ErrorBoundary';
+import { applyPageMeta } from '@/lib/pageMeta';
 import AuthErrorToast from '@/components/AuthErrorToast';
 import { Toaster } from 'sonner';
 
@@ -22,37 +23,12 @@ const TermsOfService = lazy(() => import('@/pages/TermsOfService'));
 const AccessibilityStatement = lazy(() => import('@/pages/AccessibilityStatement'));
 const NotFound = lazy(() => import('@/pages/NotFound'));
 
-// Per-route document titles (SEO + screen readers announce page changes).
-const PAGE_TITLES: [RegExp, string][] = [
-  [/^\/$/, 'TechJobsIL - Israeli Tech Jobs'],
-  [/^\/jobs/, 'Jobs - TechJobsIL'],
-  [/^\/companies/, 'Companies - TechJobsIL'],
-  [/^\/company/, 'Company Profile - TechJobsIL'],
-  [/^\/saved/, 'Saved Jobs - TechJobsIL'],
-  [/^\/map/, 'Jobs Map - TechJobsIL'],
-  [/^\/privacy/, 'Privacy Policy - TechJobsIL'],
-  [/^\/terms/, 'Terms of Service - TechJobsIL'],
-  [/^\/accessibility/, 'Accessibility Statement - TechJobsIL'],
-];
-
+// Per-route document titles and SEO meta (SEO + screen readers announce
+// page changes). See lib/pageMeta.ts.
 function PageTitle() {
   const { pathname, search } = useLocation();
   useEffect(() => {
-    const match = PAGE_TITLES.find(([re]) => re.test(pathname));
-    document.title = match ? match[1] : 'Page Not Found - TechJobsIL';
-    // index.html declares the homepage canonical, but the SPA serves
-    // distinct pages at /jobs, /companies, /company, etc. Point the
-    // canonical at the current route (keeping the company identifier) so
-    // search engines don't collapse every page into "/".
-    const canonical = document.querySelector<HTMLLinkElement>('link[rel="canonical"]');
-    if (canonical) {
-      const company = pathname.startsWith('/company')
-        ? new URLSearchParams(search).get('name')
-        : null;
-      canonical.href =
-        'https://techjobsil.com' + (pathname === '/' ? '/' : pathname) +
-        (company ? `?name=${encodeURIComponent(company)}` : '');
-    }
+    applyPageMeta(pathname, search);
   }, [pathname, search]);
   return null;
 }
