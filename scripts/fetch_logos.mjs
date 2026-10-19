@@ -22,6 +22,7 @@ import path from 'node:path';
 const FEED_URL = 'https://raw.githubusercontent.com/c5fzs2ztdp-ui/techjobs/data/jobs.json';
 const OUT_DIR = new URL('../frontend/public/logos/', import.meta.url).pathname;
 const MANIFEST = path.join(OUT_DIR, 'manifest.json');
+const SOURCES = path.join(OUT_DIR, 'logo-sources.json');
 const CONCURRENCY = 4;
 const DELAY_MS = 250;
 const FETCH_TIMEOUT_MS = 8000;
@@ -94,6 +95,7 @@ function sniffExt(p, buf) {
   if (p.endsWith('.ico') && buf[0] === 0 && buf[1] === 0 && buf[2] === 1 && buf[3] === 0) return 'ico';
   if (p.endsWith('.webp') && buf.slice(0, 4).toString('latin1') === 'RIFF') return 'webp';
   if (/\.jpe?g$/.test(p) && buf[0] === 0xff && buf[1] === 0xd8) return 'jpg';
+  if (p.endsWith('.gif') && buf.slice(0, 3).toString('latin1') === 'GIF') return 'gif';
   return null;
 }
 
@@ -144,23 +146,31 @@ async function homepageIconUrls(domain) {
   } catch { return []; }
 }
 
-async function fetchLogo(domain) {
-  const hosts = domain.startsWith('www.') ? [domain] : [domain, `www.${domain}`];
+async function fetchLogo(domain, fallbackUrl = null) {
+  const hosts = domain ? (domain.startsWith('www.') ? [domain] : [domain, `www.${domain}`]) : [];
   for (const host of hosts) {
     // 1. homepage-declared icons (best quality signal)
     for (const url of await homepageIconUrls(host)) {
       const r = await tryUrl(url);
-      if (r === 'retry') { const r2 = await tryUrl(url); if (r2 && r2 !== 'retry') return r2; }
-      else if (r) return r;
+      if (r === 'retry') { const r2 = await tryUrl(url); if (r2 && r2 !== 'retry') return { ...r2, url }; }
+      else if (r) return { ...r, url };
       await new Promise((r) => setTimeout(r, DELAY_MS));
     }
     // 2. conventional paths
     for (const p of CANDIDATES) {
-      const r = await tryUrl(`https://${host}${p}`);
-      if (r === 'retry') { const r2 = await tryUrl(`https://${host}${p}`); if (r2 && r2 !== 'retry') return r2; }
-      else if (r) return r;
+      const url = `https://${host}${p}`;
+      const r = await tryUrl(url);
+      if (r === 'retry') { const r2 = await tryUrl(url); if (r2 && r2 !== 'retry') return { ...r2, url }; }
+      else if (r) return { ...r, url };
       await new Promise((r) => setTimeout(r, DELAY_MS));
     }
+  }
+  // 3. the company's recorded curated source (logo-sources.json), last resort:
+  // lets a refresh recover the logo when own-domain lookup fails.
+  if (fallbackUrl) {
+    const r = await tryUrl(fallbackUrl);
+    if (r === 'retry') { const r2 = await tryUrl(fallbackUrl); if (r2 && r2 !== 'retry') return { ...r2, url: fallbackUrl }; }
+    else if (r) return { ...r, url: fallbackUrl };
   }
   return null;
 }
@@ -253,17 +263,35 @@ async function main() {
   // company's logo, the previously downloaded file stays referenced instead
   // of silently dropping out.
   const manifest = existsSync(MANIFEST) ? JSON.parse(await readFile(MANIFEST, 'utf8')) : {};
-  let done = 0, got = 0, kept = 0;
+  // Curated/recorded non-default sources; used as a fallback candidate on
+  // refresh and kept in sync with what actually supplied each logo.
+  const hadSources = existsSync(SOURCES);
+  const sources = hadSources ? JSON.parse(await readFile(SOURCES, 'utf8')) : {};
+  let done = 0, got = 0, kept = 0, curatedHits = 0;
   const queue = [...targets.entries()];
+  // Companies with no derivable domain but a recorded source still get a try.
+  for (const c of unresolved) if (sources[c]) queue.push([c, null]);
   async function worker() {
     while (queue.length) {
       const [company, domain] = queue.shift();
-      const logo = await fetchLogo(domain);
+      const entry = sources[company];
+      const curatedUrl = entry ? (typeof entry === 'string' ? entry : entry.source_url) : null;
+      const logo = await fetchLogo(domain, curatedUrl);
       if (logo) {
         const file = `${slugify(company)}.${logo.ext}`;
         await writeFile(path.join(OUT_DIR, file), logo.buf);
         manifest[company] = file;
         got++;
+        if (curatedUrl && logo.url === curatedUrl) {
+          // Fetched via the recorded source: its entry stays accurate
+          // (object entries keep their page metadata untouched).
+          curatedHits++;
+        } else if (entry) {
+          // An own-domain fetch replaced the curated logo: the recorded
+          // source no longer describes the file, so drop the stale entry.
+          delete sources[company];
+          console.log(`source-stale - ${company} (own-domain fetch replaced curated source)`);
+        }
       } else {
         const existing = manifest[company];
         if (existing && existsSync(path.join(OUT_DIR, existing))) {
@@ -283,7 +311,9 @@ async function main() {
   await writeFile(MANIFEST, manifestJson);
   // Static import copy for the frontend bundle (CompanyLogo.tsx).
   await writeFile(new URL('../frontend/src/generated/companyLogos.json', import.meta.url), manifestJson);
-  console.log(`DONE: ${got} fetched, ${kept} kept, ${Object.keys(manifest).length}/${companies.length} companies in manifest`);
+  // Keep the curated source map in sync with what the refresh actually did.
+  if (hadSources) await writeFile(SOURCES, JSON.stringify(sources, null, 1) + '\n');
+  console.log(`DONE: ${got} fetched (${curatedHits} via curated source), ${kept} kept, ${Object.keys(manifest).length}/${companies.length} companies in manifest`);
   console.log(`unresolved sample: ${unresolved.slice(0, 20).join(', ')}`);
 }
 
