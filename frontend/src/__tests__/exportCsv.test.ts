@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { jobsToCsv } from '../components/jobs/exportCsv';
+import { jobsToCsv, csvFileName } from '../components/jobs/exportCsv';
 import type { Job } from '../components/jobs/jobsData';
 
 function job(overrides: Partial<Job>): Job {
@@ -41,7 +41,7 @@ describe('jobsToCsv', () => {
   });
 
   it('neutralizes spreadsheet formula injection in feed-controlled cells', () => {
-    for (const evil of ['=1+1', '+SUM(A1)', '-2+3', '@cmd', '\t=1+1', '  =cmd|"/c calc"!A1']) {
+    for (const evil of ['=1+1', '+SUM(A1)', '-2+3', '@cmd', '\t=1+1', '\n=1+1', '\r\n=1+1', '  =cmd|"/c calc"!A1']) {
       const csv = jobsToCsv([job({ title: evil })]);
       const cell = csv.slice(1).split('\r\n')[1].split(',')[0];
       // the neutralizing quote is the first character, inside RFC 4180
@@ -51,6 +51,12 @@ describe('jobsToCsv', () => {
     // ordinary leading-dash-free text stays untouched
     const csv = jobsToCsv([job({ title: 'Senior Dev' })]);
     expect(csv.slice(1).split('\r\n')[1].split(',')[0]).toBe('Senior Dev');
+  });
+
+  it('names the download file with the Israel calendar day, not UTC', () => {
+    // 2026-10-19 01:30 IDT is still 2026-10-18 in UTC
+    const lateEveningUtc = new Date('2026-10-18T22:30:00Z');
+    expect(csvFileName(lateEveningUtc)).toBe('techjobs-2026-10-19.csv');
   });
 
   it('returns header only for an empty list', () => {

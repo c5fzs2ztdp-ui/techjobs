@@ -21,7 +21,7 @@ function csvCell(value: string | null | undefined): string {
   // non-whitespace character is = + - or @ (including after tabs/CRs) as a
   // formula. Job fields are feed-controlled, so neutralize them with a
   // leading single quote before RFC 4180 quoting.
-  if (/^[\t\r ]*[=+\-@]/.test(v)) v = `'${v}`;
+  if (/^[\t\r\n ]*[=+\-@]/.test(v)) v = `'${v}`;
   return /[",\r\n]/.test(v) ? `"${v.replace(/"/g, '""')}"` : v;
 }
 
@@ -57,14 +57,20 @@ export function jobsToCsv(jobs: Job[]): string {
   return "\uFEFF" + lines.join("\r\n") + "\r\n";
 }
 
+/** Download filename for the export: dated by the Israel calendar day
+ *  (Asia/Jerusalem, same as isNewToday), not UTC. */
+export function csvFileName(date: Date = new Date()): string {
+  const stamp = date.toLocaleDateString("en-CA", { timeZone: "Asia/Jerusalem" });
+  return `techjobs-${stamp}.csv`;
+}
+
 /** Triggers a browser download of the given jobs as a dated CSV file. */
 export function downloadJobsCsv(jobs: Job[], date: Date = new Date()): void {
-  const stamp = date.toISOString().slice(0, 10);
   const blob = new Blob([jobsToCsv(jobs)], { type: "text/csv;charset=utf-8" });
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
   a.href = url;
-  a.download = `techjobs-${stamp}.csv`;
+  a.download = csvFileName(date);
   document.body.appendChild(a);
   a.click();
   a.remove();
