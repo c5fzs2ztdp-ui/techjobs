@@ -64,6 +64,20 @@ async function fetchWithTimeout(url, opts = {}, consume = null) {
   } finally { clearTimeout(t); }
 }
 
+// Read a response body with a hard byte cap: a missing or dishonest
+// Content-Length cannot turn into an unbounded allocation. Throws (and so
+// aborts the connection) as soon as the cap is exceeded.
+async function readBodyBounded(res, maxBytes) {
+  const chunks = [];
+  let total = 0;
+  for await (const chunk of res.body) {
+    total += chunk.length;
+    if (total > maxBytes) throw new Error(`body exceeds ${maxBytes} bytes`);
+    chunks.push(chunk);
+  }
+  return Buffer.concat(chunks);
+}
+
 // Candidate logo paths, best quality first.
 const CANDIDATES = [
   '/apple-touch-icon.png',
@@ -92,8 +106,8 @@ async function tryUrl(url) {
       const len = Number(res.headers.get('content-length') || 0);
       if (len > MAX_BYTES) return null;
       if (!/image|octet-stream|icon|svg/.test(type)) return null;
-      const buf = Buffer.from(await res.arrayBuffer());
-      if (buf.length < 100 || buf.length > MAX_BYTES) return null;
+      const buf = await readBodyBounded(res, MAX_BYTES);
+      if (buf.length < 100) return null;
       const ext = sniffExt(url.split('?')[0], buf);
       if (!ext) return null;
       return { buf, ext };
@@ -107,7 +121,7 @@ async function homepageIconUrls(domain) {
   try {
     const html = await fetchWithTimeout(`https://${domain}/`, {}, async (res) => {
       if (!res.ok) return null;
-      return (await res.text()).slice(0, 300000);
+      return (await readBodyBounded(res, 300000)).toString('utf8');
     });
     if (!html) return [];
     const urls = [];
