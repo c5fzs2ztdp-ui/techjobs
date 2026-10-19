@@ -47,16 +47,20 @@ function ownDomain(u) {
   return h;
 }
 
-async function fetchWithTimeout(url, opts = {}) {
+// The abort deadline covers the body read too when a consume callback is
+// given: fetch() resolves on headers, so clearing the timer there would
+// leave arrayBuffer()/text()/json() with no timeout at all.
+async function fetchWithTimeout(url, opts = {}, consume = null) {
   const ctrl = new AbortController();
   const t = setTimeout(() => ctrl.abort(), FETCH_TIMEOUT_MS);
   try {
-    return await fetch(url, {
+    const res = await fetch(url, {
       ...opts,
       signal: ctrl.signal,
       redirect: 'follow',
       headers: { 'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36', ...opts.headers },
     });
+    return consume ? await consume(res) : res;
   } finally { clearTimeout(t); }
 }
 
@@ -81,18 +85,19 @@ function sniffExt(p, buf) {
 
 async function tryUrl(url) {
   try {
-    const res = await fetchWithTimeout(url);
-    if (res.status === 429) { await new Promise((r) => setTimeout(r, 3000)); return 'retry'; }
-    if (!res.ok) return null;
-    const type = (res.headers.get('content-type') || '').toLowerCase();
-    const len = Number(res.headers.get('content-length') || 0);
-    if (len > MAX_BYTES) return null;
-    if (!/image|octet-stream|icon|svg/.test(type)) return null;
-    const buf = Buffer.from(await res.arrayBuffer());
-    if (buf.length < 100 || buf.length > MAX_BYTES) return null;
-    const ext = sniffExt(url.split('?')[0], buf);
-    if (!ext) return null;
-    return { buf, ext };
+    return await fetchWithTimeout(url, {}, async (res) => {
+      if (res.status === 429) { await new Promise((r) => setTimeout(r, 3000)); return 'retry'; }
+      if (!res.ok) return null;
+      const type = (res.headers.get('content-type') || '').toLowerCase();
+      const len = Number(res.headers.get('content-length') || 0);
+      if (len > MAX_BYTES) return null;
+      if (!/image|octet-stream|icon|svg/.test(type)) return null;
+      const buf = Buffer.from(await res.arrayBuffer());
+      if (buf.length < 100 || buf.length > MAX_BYTES) return null;
+      const ext = sniffExt(url.split('?')[0], buf);
+      if (!ext) return null;
+      return { buf, ext };
+    });
   } catch { return null; }
 }
 
@@ -100,9 +105,11 @@ async function tryUrl(url) {
 // keep icons off the default paths, including SVG-only sites).
 async function homepageIconUrls(domain) {
   try {
-    const res = await fetchWithTimeout(`https://${domain}/`);
-    if (!res.ok) return [];
-    const html = (await res.text()).slice(0, 300000);
+    const html = await fetchWithTimeout(`https://${domain}/`, {}, async (res) => {
+      if (!res.ok) return null;
+      return (await res.text()).slice(0, 300000);
+    });
+    if (!html) return [];
     const urls = [];
     const re = /<link[^>]+rel=["'][^"']*(?:icon|apple-touch-icon)[^"']*["'][^>]*>/gi;
     let m;
@@ -178,9 +185,10 @@ async function main() {
   let feed;
   if (feedArg) feed = JSON.parse(await readFile(feedArg, 'utf8'));
   else {
-    const res = await fetchWithTimeout(FEED_URL);
-    if (!res.ok) throw new Error(`feed fetch HTTP ${res.status}`);
-    feed = await res.json();
+    feed = await fetchWithTimeout(FEED_URL, {}, async (res) => {
+      if (!res.ok) throw new Error(`feed fetch HTTP ${res.status}`);
+      return res.json();
+    });
   }
   const rows = Array.isArray(feed) ? feed : feed.jobs;
   const companies = [...new Set(rows.map((j) => j.company).filter(Boolean))].sort();
@@ -226,8 +234,12 @@ async function main() {
   console.log(`domains resolved: ${targets.size}, unresolved: ${unresolved.length}`);
 
   await mkdir(OUT_DIR, { recursive: true });
-  const manifest = {};
-  let done = 0, got = 0;
+  // Start from the existing manifest (including curated logo-sources.json
+  // mappings, which were folded into it): if a refresh cannot re-fetch a
+  // company's logo, the previously downloaded file stays referenced instead
+  // of silently dropping out.
+  const manifest = existsSync(MANIFEST) ? JSON.parse(await readFile(MANIFEST, 'utf8')) : {};
+  let done = 0, got = 0, kept = 0;
   const queue = [...targets.entries()];
   async function worker() {
     while (queue.length) {
@@ -239,7 +251,14 @@ async function main() {
         manifest[company] = file;
         got++;
       } else {
-        console.log(`miss - ${company} (${domain})`);
+        const existing = manifest[company];
+        if (existing && existsSync(path.join(OUT_DIR, existing))) {
+          kept++;
+          console.log(`keep - ${company} (refetch failed, keeping ${existing})`);
+        } else {
+          delete manifest[company];
+          console.log(`miss - ${company} (${domain})`);
+        }
       }
       if (++done % 50 === 0) console.log(`progress ${done}/${targets.size}, got ${got}`);
       await new Promise((r) => setTimeout(r, DELAY_MS));
@@ -250,7 +269,7 @@ async function main() {
   await writeFile(MANIFEST, manifestJson);
   // Static import copy for the frontend bundle (CompanyLogo.tsx).
   await writeFile(new URL('../frontend/src/generated/companyLogos.json', import.meta.url), manifestJson);
-  console.log(`DONE: ${got}/${companies.length} companies got a logo (${Math.round((100 * got) / companies.length)}%)`);
+  console.log(`DONE: ${got} fetched, ${kept} kept, ${Object.keys(manifest).length}/${companies.length} companies in manifest`);
   console.log(`unresolved sample: ${unresolved.slice(0, 20).join(', ')}`);
 }
 

@@ -20,14 +20,17 @@ export default function CompanyLogo({
   textSize = "text-xl",
   ...rest
 }: CompanyLogoProps) {
-  const [error, setError] = useState(false);
+  // Track which URL failed rather than a bare boolean: when the component
+  // later receives a different name/logoUrl, the stale failure no longer
+  // forces the letter avatar and the new logo gets a fresh chance to load.
+  const [failedUrl, setFailedUrl] = useState<string | null>(null);
+
+  const file = name ? (logoManifest as Record<string, string>)[name] : undefined;
+  const logoUrl = providedLogoUrl || (file ? `/logos/${file}` : null);
 
   if (!name) return null;
 
-  const file = (logoManifest as Record<string, string>)[name];
-  const logoUrl = providedLogoUrl || (file ? `/logos/${file}` : null);
-
-  if (!logoUrl || error) {
+  if (!logoUrl || failedUrl === logoUrl) {
     return (
       <div
         className={`${className} rounded-lg bg-iris-100 flex items-center justify-center ${textSize} font-bold text-iris-600 shrink-0`}
@@ -51,7 +54,7 @@ export default function CompanyLogo({
         className="w-full h-full object-contain p-2"
         loading="lazy"
         decoding="async"
-        onError={() => setError(true)}
+        onError={() => setFailedUrl(logoUrl)}
       />
     </div>
   );
