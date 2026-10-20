@@ -14,6 +14,9 @@ import JobCard from "@/components/jobs/JobCard";
 import JobsLoader from "@/components/jobs/JobsLoader";
 import { CATEGORY_LABELS, displayCity, fetchJobsPayload, isClosed, JOBS_PAYLOAD_QUERY_KEY, selectCityLabels, selectSortedJobs, type Job } from "@/components/jobs/jobsData";
 import { savedJobsApi } from "@/api/storage";
+import GuestGateModal from "@/components/GuestGateModal";
+import { GUEST_JOB_LIMIT, useGuestGate } from "@/hooks/useGuestGate";
+import { Lock } from "lucide-react";
 
 // Types for mutation results
 type SaveMutationResult = { action: 'saved' | 'removed'; job: Job };
@@ -245,15 +248,29 @@ export default function Jobs() {
     });
   }, [jobs, filters, searchQuery, cityLabels]);
 
+  // Guest gate: unauthenticated visitors see only the first GUEST_JOB_LIMIT
+  // results and no pagination; the full board unlocks after login.
+  // The grace-period clock starts only once jobs are actually on screen.
+  const [jobsShown, setJobsShown] = useState(false);
+  const guestGate = useGuestGate(jobsShown);
+  const gatedJobs = guestGate.listLimited
+    ? filteredJobs.slice(0, GUEST_JOB_LIMIT)
+    : filteredJobs;
+
   // Pagination
-  const totalPages = Math.ceil(filteredJobs.length / JOBS_PER_PAGE);
+  const totalPages = Math.ceil(gatedJobs.length / JOBS_PER_PAGE);
   // A background refetch can shrink the result set while the user sits on a
   // page that no longer exists; clamp instead of rendering an empty list.
   const activePage = Math.min(currentPage, Math.max(totalPages, 1));
-  const paginatedJobs = filteredJobs.slice(
+  const paginatedJobs = gatedJobs.slice(
     (activePage - 1) * JOBS_PER_PAGE,
     activePage * JOBS_PER_PAGE
   );
+
+  // Start the guest grace clock the first time a job is actually visible.
+  useEffect(() => {
+    if (!jobsShown && paginatedJobs.length > 0) setJobsShown(true);
+  }, [jobsShown, paginatedJobs.length]);
 
   // Reset to page 1 when filters change
   useEffect(() => {
@@ -320,6 +337,7 @@ export default function Jobs() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-warm-50 to-iris-50/30">
+      {guestGate.timeUp && <GuestGateModal />}
       {/* Hero Section */}
       <div className="bg-gradient-to-r from-iris-700 via-iris-800 to-iris-900 text-white">
         <div className="max-w-7xl mx-auto px-4 py-8 md:py-16">
@@ -425,6 +443,17 @@ export default function Jobs() {
                     />
                   ))}
                 </div>
+
+                {/* Guest gate: locked remainder notice */}
+                {guestGate.listLimited && filteredJobs.length > GUEST_JOB_LIMIT && (
+                  <div className="max-w-4xl mt-4 rounded-lg border border-warm-200 bg-white p-6 text-center space-y-2">
+                    <Lock className="w-6 h-6 text-iris-600 mx-auto" aria-hidden="true" />
+                    <p className="text-warm-700 font-medium">
+                      {filteredJobs.length - GUEST_JOB_LIMIT} more jobs are locked for guests
+                    </p>
+                    <p className="text-warm-500 text-sm">Log in to see the full board.</p>
+                  </div>
+                )}
 
                 {/* Pagination */}
                 {totalPages > 1 && (
