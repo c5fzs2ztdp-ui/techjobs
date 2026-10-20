@@ -105,6 +105,25 @@ describe('pull_logos.mjs', () => {
     expect(logos()).toEqual(['old.png']);
   });
 
+  it('reads the deploy key from LOGOS_DEPLOY_KEY_FILE (build secret mount)', () => {
+    const kf = path.join(work, 'secret_key');
+    writeFileSync(kf, 'k\n');
+    const r = run(makeFixture('{"A":"a.png"}', OK_SRC), { LOGOS_DEPLOY_KEY: '', LOGOS_DEPLOY_KEY_FILE: kf });
+    expect(r.status).toBe(0);
+    expect(logos()).toEqual(['a.png', 'logo-sources.json']);
+    expect(`${r.stdout}${r.stderr}`).not.toContain('secret_key');
+  });
+
+  it('skips the pull when the key file is missing or empty', () => {
+    const kf = path.join(work, 'empty_key');
+    writeFileSync(kf, '\n');
+    for (const f of [kf, path.join(work, 'nope')]) {
+      const r = run(makeFixture('{"A":"a.png"}', OK_SRC), { LOGOS_DEPLOY_KEY: '', LOGOS_DEPLOY_KEY_FILE: f });
+      expect(r.status).toBe(0);
+      expect(logos()).toEqual(['old.png']);
+    }
+  });
+
   it('skips the pull entirely without a deploy key', () => {
     const r = run(makeFixture('{"A":"a.png"}', OK_SRC), { LOGOS_DEPLOY_KEY: '' });
     expect(r.status).toBe(0);

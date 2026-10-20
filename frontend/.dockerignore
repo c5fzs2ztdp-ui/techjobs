@@ -7,3 +7,6 @@ dist
 .env.local
 .DS_Store
 README.md
+
+# Render copies secret files into the build context root
+logos_deploy_key

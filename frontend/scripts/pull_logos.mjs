@@ -2,7 +2,7 @@
 // them into the frontend before bundling. The logo files are NOT committed
 // to this repository; they live in a private repo (default
 // c5fzs2ztdp-ui/techjob-logos) and are pulled with a read-only deploy key
-// supplied via the LOGOS_DEPLOY_KEY environment variable.
+// supplied via LOGOS_DEPLOY_KEY or LOGOS_DEPLOY_KEY_FILE.
 //
 // The script lives inside frontend/ so every build context that has the
 // frontend sources (root Dockerfile, frontend/Dockerfile, local dev) also
@@ -18,6 +18,8 @@
 //
 // Env:
 //   LOGOS_DEPLOY_KEY  SSH private key (ed25519) with read access to the repo
+//   LOGOS_DEPLOY_KEY_FILE  path to a file holding that key (preferred in Docker:
+//                     a build secret mount, so the key never reaches logs or layers)
 //   LOGOS_REPO        optional override, owner/name form (default below)
 //   LOGOS_PULL_TIMEOUT_MS  optional clone deadline (default 120000)
 import {
@@ -42,7 +44,15 @@ if (!existsSync(GENERATED)) {
   writeFileSync(GENERATED, '{}\n');
 }
 
-const key = process.env.LOGOS_DEPLOY_KEY;
+// The key comes from LOGOS_DEPLOY_KEY, or from the file named by
+// LOGOS_DEPLOY_KEY_FILE (a Docker build secret mount: never echoed into the
+// build log or stored in an image layer, unlike an ARG/env value).
+let key = process.env.LOGOS_DEPLOY_KEY;
+const keyFileEnv = process.env.LOGOS_DEPLOY_KEY_FILE;
+if (!key && keyFileEnv && existsSync(keyFileEnv)) {
+  try { key = readFileSync(keyFileEnv, 'utf8'); } catch { key = undefined; }
+}
+if (key !== undefined && !key.trim()) key = undefined;
 if (!key) {
   console.log('pull_logos: LOGOS_DEPLOY_KEY not set - building with in-tree assets (letter avatars for unmapped companies)');
   process.exit(0);
