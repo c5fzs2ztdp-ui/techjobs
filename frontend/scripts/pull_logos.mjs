@@ -11,7 +11,7 @@
 // This script NEVER fails the build:
 // - No LOGOS_DEPLOY_KEY set (CI, forks, contributors): the committed
 //   placeholder manifest stays and every company renders its letter avatar.
-// - Key set but the clone, validation or install fails for any reason: warn
+// - Key set but the clone, validation (manifest and optional logo-sources.json) or install fails for any reason: warn
 //   and continue with whatever is already in the tree. Existing logos and
 //   the existing manifest are only replaced after the new set is fully
 //   staged and validated.
@@ -76,6 +76,48 @@ function validateManifest(raw, logosDir) {
   return parsed;
 }
 
+function isHttpUrl(value) {
+  if (typeof value !== 'string') return false;
+  try {
+    const u = new URL(value);
+    return u.protocol === 'http:' || u.protocol === 'https:';
+  } catch {
+    return false;
+  }
+}
+
+// Optional provenance map (logo-sources.json, shipped in the private assets
+// repo next to the logos): company name -> source URL, or an object with a
+// source_url and optional page URL. When present, every entry must have a
+// valid http(s) URL and refer to a company in the manifest. The map is not
+// required to cover every logo; it only has to be well-formed and consistent.
+function validateSources(logosDir, manifest) {
+  const file = path.join(logosDir, 'logo-sources.json');
+  if (!existsSync(file)) return 0;
+  let parsed;
+  try {
+    parsed = JSON.parse(readFileSync(file, 'utf8'));
+  } catch (e) {
+    throw new Error(`logo-sources.json is not valid JSON (${e.message})`);
+  }
+  if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) {
+    throw new Error('logo-sources.json is not a company -> source object');
+  }
+  for (const [name, entry] of Object.entries(parsed)) {
+    if (!Object.prototype.hasOwnProperty.call(manifest, name)) {
+      throw new Error(`logo-sources.json entry "${name}" is not a company in the manifest`);
+    }
+    const sourceUrl = typeof entry === 'string' ? entry : entry && typeof entry === 'object' ? entry.source_url : undefined;
+    if (!isHttpUrl(sourceUrl)) {
+      throw new Error(`logo-sources.json entry "${name}" has no valid http(s) source URL`);
+    }
+    if (entry && typeof entry === 'object' && entry.page !== undefined && !isHttpUrl(entry.page)) {
+      throw new Error(`logo-sources.json entry "${name}" has an invalid page URL`);
+    }
+  }
+  return Object.keys(parsed).length;
+}
+
 let keyDir;
 let backupDir;
 let stagingDir;
@@ -109,6 +151,7 @@ try {
   cpSync(srcLogos, stagingDir, { recursive: true });
   const manifestText = readFileSync(srcManifest, 'utf8');
   const manifest = validateManifest(manifestText, stagingDir);
+  const sourceCount = validateSources(stagingDir, manifest);
   const normalized = JSON.stringify(manifest, null, 2) + '\n';
 
   // Swap in. Keep a backup of the current logos until the manifest write
@@ -128,7 +171,7 @@ try {
     writeFileSync(GENERATED, oldManifest);
     throw e;
   }
-  console.log(`pull_logos: installed ${Object.keys(manifest).length} logos from ${REPO}`);
+  console.log(`pull_logos: installed ${Object.keys(manifest).length} logos (${sourceCount} source entries) from ${REPO}`);
 } catch (e) {
   console.warn(`pull_logos: WARNING - could not pull logos (${e.message}); building with in-tree assets`);
 } finally {
