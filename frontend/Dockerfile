@@ -8,6 +8,12 @@ ARG VITE_JOBS_DATA_URL
 ARG VITE_SUBMIT_COMPANY_URL
 ENV VITE_JOBS_DATA_URL=$VITE_JOBS_DATA_URL
 ENV VITE_SUBMIT_COMPANY_URL=$VITE_SUBMIT_COMPANY_URL
+# Optional read-only deploy key for the private logo assets repo (see
+# scripts/pull_logos.mjs). Empty/unset: build keeps letter avatars.
+ARG LOGOS_DEPLOY_KEY
+
+# git + ssh are needed by the optional logo pull
+RUN apk add --no-cache git openssh-client
 
 # Copy package files
 COPY package*.json ./
@@ -19,7 +25,7 @@ RUN npm ci
 COPY . .
 
 # Build the app
-RUN npm run build
+RUN LOGOS_DEPLOY_KEY="$LOGOS_DEPLOY_KEY" npm run build
 
 # Production stage - serve with nginx
 FROM nginx:alpine
