@@ -12,6 +12,8 @@ import {
 import { Input } from "@/components/ui/input";
 import JobCard from "@/components/jobs/JobCard";
 import CompanyLogo from "@/components/CompanyLogo";
+import GuestGateModal from "@/components/GuestGateModal";
+import { GUEST_JOB_LIMIT, useGuestGate } from "@/hooks/useGuestGate";
 import { savedJobsApi } from "@/api/storage";
 import { toast } from "sonner";
 
@@ -108,6 +110,14 @@ export default function CompanyProfile() {
 
   const isJobSaved = (job: Job) => savedJobs.some(s => s.url === job.url);
 
+  // Same guest gate as the Jobs page (shared first-visit clock), so company
+  // pages are not a way around the preview limit.
+  const guestGate = useGuestGate((companyData?.jobs.length ?? 0) > 0);
+  const visibleJobs = guestGate.listLimited
+    ? (companyData?.jobs ?? []).slice(0, GUEST_JOB_LIMIT)
+    : (companyData?.jobs ?? []);
+  const lockedCount = (companyData?.jobs.length ?? 0) - visibleJobs.length;
+
   if (!companyName) {
     return (
       <div className="min-h-screen bg-warm-50 flex flex-col items-center justify-center p-4">
@@ -121,6 +131,7 @@ export default function CompanyProfile() {
 
   return (
     <div className="min-h-screen bg-warm-50">
+      {guestGate.timeUp && <GuestGateModal />}
       {/* Header */}
       <div className="bg-white border-b border-warm-200">
         <div className="max-w-5xl mx-auto px-4 py-8">
@@ -253,7 +264,7 @@ export default function CompanyProfile() {
                     <Button variant="link" onClick={() => setSearchQuery('')}>Clear filter</Button>
                   </div>
                 )}
-                {companyData.jobs.map((job, index) => (
+                {visibleJobs.map((job, index) => (
                   <JobCard
                     key={`${job.url}-${index}`}
                     job={job}
@@ -262,6 +273,14 @@ export default function CompanyProfile() {
                     isSaved={isJobSaved(job)}
                   />
                 ))}
+                {guestGate.listLimited && lockedCount > 0 && (
+                  <div className="rounded-lg border border-warm-200 bg-white p-6 text-center space-y-2">
+                    <p className="text-warm-700 font-medium">
+                      {lockedCount} more jobs are locked for guests
+                    </p>
+                    <p className="text-warm-500 text-sm">Log in to see all jobs at this company.</p>
+                  </div>
+                )}
               </div>}
           </div>
         )}

@@ -57,12 +57,17 @@ export interface GuestGateState {
 // `timerActive` lets the caller anchor the clock at the moment the guest
 // actually sees jobs (not at page load): pass true once the list renders.
 export function useGuestGate(timerActive = true): GuestGateState {
-  const { isAuthenticated, isLoading } = useAuth();
+  const { isAuthenticated, isLoading, authUnavailable } = useAuth();
   const crawler = useMemo(
     () => isCrawler(typeof navigator !== 'undefined' ? navigator.userAgent : ''),
     []
   );
-  const isGuest = !isLoading && !isAuthenticated && !crawler;
+  // A confirmed anonymous session only: while the auth check is pending or
+  // failed we do not know who the visitor is.
+  const isGuest = !isLoading && !authUnavailable && !isAuthenticated && !crawler;
+  // Unknown identity keeps the preview limit (no free full board) but never
+  // starts the clock or forces sign-in.
+  const authUnknown = (isLoading || authUnavailable === true) && !isAuthenticated && !crawler;
 
   const [now, setNow] = useState(() => Date.now());
 
@@ -82,7 +87,7 @@ export function useGuestGate(timerActive = true): GuestGateState {
   }, [isGuest, timerActive]);
 
   if (!isGuest) {
-    return { isGuest: false, listLimited: false, timeUp: false, secondsLeft: 0 };
+    return { isGuest: false, listLimited: authUnknown, timeUp: false, secondsLeft: 0 };
   }
   const anchor = start ?? now;
   const remaining = Math.max(0, GUEST_TIME_LIMIT_MS - (now - anchor));

@@ -1,25 +1,31 @@
 import { describe, it, expect, vi, afterEach, beforeAll, beforeEach } from 'vitest';
-import { render, screen, waitFor, cleanup } from '@testing-library/react';
+import { render, screen, waitFor, cleanup, fireEvent } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter } from 'react-router-dom';
 import Jobs from '@/pages/Jobs';
+import CompanyProfile from '@/pages/CompanyProfile';
+import GuestGateModal from '@/components/GuestGateModal';
 import { GUEST_GATE_START_KEY, GUEST_JOB_LIMIT, isCrawler } from '@/hooks/useGuestGate';
 
-function makeJobs(n: number) {
+function makeJobs(n: number, company?: string) {
   return Array.from({ length: n }, (_, i) => ({
-    company: `Co${i}`, title: `Engineer ${i}`, url: `https://x/${i}`,
+    company: company ?? `Co${i}`, title: `Engineer ${i}`, url: `https://x/${i}`,
     job_category: 'software', cities: ['Tel Aviv'], updated: '2026-10-17',
   }));
 }
 
-function mockFetch(jobCount: number, authenticated: boolean) {
+type AuthMode = 'guest' | 'down' | 'pending';
+
+function mockFetch(jobCount: number, authenticated: boolean, opts: { auth?: AuthMode; company?: string } = {}) {
   const payload = {
     schemaVersion: 1, updatedAt: '2026-10-18T00:00:00Z', count: jobCount,
-    cityLabels: { 'Tel Aviv': 'תל אביב' }, jobs: makeJobs(jobCount),
+    cityLabels: { 'Tel Aviv': 'תל אביב' }, jobs: makeJobs(jobCount, opts.company),
   };
   vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => {
     const url = String(input);
     if (url.includes('/auth/me')) {
+      if (opts.auth === 'pending') return new Promise<Response>(() => {});
+      if (opts.auth === 'down') return { ok: false, status: 503, json: async () => ({}) } as Response;
       return authenticated
         ? { ok: true, json: async () => ({ authenticated: true, user: { id: 'u1', email: 'a@b.c', name: 'A' } }) } as Response
         : { ok: false, status: 401, json: async () => ({}) } as Response;
@@ -126,3 +132,87 @@ describe('guest gate', () => {
     expect(dialog.className).toContain('max-h-');
   });
 });
+
+describe('guest gate hardening', () => {
+  it('keeps the preview limited and never shows the modal while auth is pending', async () => {
+    window.localStorage.setItem(GUEST_GATE_START_KEY, String(Date.now() - 31_000));
+    mockFetch(15, false, { auth: 'pending' });
+    renderJobs();
+    await waitFor(() => expect(screen.getByText('Engineer 0')).toBeTruthy());
+    expect(screen.queryByText('Engineer 10')).toBeNull();
+    expect(screen.queryByRole('dialog')).toBeNull();
+  });
+
+  it('does not force sign-in or unlock the board when the auth check is unavailable', async () => {
+    window.localStorage.setItem(GUEST_GATE_START_KEY, String(Date.now() - 31_000));
+    mockFetch(15, false, { auth: 'down' });
+    renderJobs();
+    await waitFor(() => expect(screen.getByText('Engineer 0')).toBeTruthy());
+    await new Promise((r) => setTimeout(r, 50));
+    expect(screen.queryByRole('dialog')).toBeNull();
+    expect(screen.queryByText('Engineer 10')).toBeNull();
+  });
+
+  it('applies the gate to company profile job listings', async () => {
+    window.history.pushState({}, '', '/?name=BigCo');
+    mockFetch(15, false, { company: 'BigCo' });
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    render(
+      <QueryClientProvider client={client}>
+        <MemoryRouter>
+          <CompanyProfile />
+        </MemoryRouter>
+      </QueryClientProvider>
+    );
+    await waitFor(() => expect(screen.getByText('Engineer 0')).toBeTruthy());
+    expect(screen.getByText('Engineer 9')).toBeTruthy();
+    expect(screen.queryByText('Engineer 10')).toBeNull();
+    expect(screen.getByText(/5 more jobs are locked for guests/)).toBeTruthy();
+    window.history.pushState({}, '', '/');
+  });
+
+  it('shows the blocking modal on company pages when the clock has expired', async () => {
+    window.localStorage.setItem(GUEST_GATE_START_KEY, String(Date.now() - 31_000));
+    window.history.pushState({}, '', '/?name=BigCo');
+    mockFetch(15, false, { company: 'BigCo' });
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    render(
+      <QueryClientProvider client={client}>
+        <MemoryRouter>
+          <CompanyProfile />
+        </MemoryRouter>
+      </QueryClientProvider>
+    );
+    await waitFor(() => expect(screen.getByRole('dialog')).toBeTruthy());
+    window.history.pushState({}, '', '/');
+  });
+});
+
+describe('GuestGateModal keyboard handling', () => {
+  function renderModal() {
+    const client = new QueryClient();
+    return render(
+      <QueryClientProvider client={client}>
+        <button type="button">background</button>
+        <GuestGateModal />
+      </QueryClientProvider>
+    );
+  }
+
+  it('swallows Escape before dialogs underneath can react to it', () => {
+    renderModal();
+    const underlying = vi.fn();
+    document.addEventListener('keydown', underlying);
+    fireEvent.keyDown(screen.getByRole('button', { name: 'Log in with Google' }), { key: 'Escape' });
+    document.removeEventListener('keydown', underlying);
+    expect(underlying).not.toHaveBeenCalled();
+  });
+
+  it('pulls focus back into the dialog when it lands on the background', () => {
+    renderModal();
+    const login = screen.getByRole('button', { name: 'Log in with Google' });
+    screen.getByRole('button', { name: 'background' }).focus();
+    expect(document.activeElement).toBe(login);
+  });
+});
+

@@ -23,6 +23,30 @@ export default function GuestGateModal() {
     };
   }, []);
 
+  // Keep the gate in charge of the keyboard: swallow Escape before any
+  // dialog underneath (e.g. the mobile filter panel) sees it, and pull focus
+  // back if it ever lands outside the dialog.
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        e.stopPropagation();
+      }
+    };
+    const onFocusIn = (e: FocusEvent) => {
+      const dialog = dialogRef.current;
+      if (dialog && e.target instanceof Node && !dialog.contains(e.target)) {
+        loginButtonRef.current?.focus();
+      }
+    };
+    window.addEventListener('keydown', onKeyDown, true);
+    document.addEventListener('focusin', onFocusIn);
+    return () => {
+      window.removeEventListener('keydown', onKeyDown, true);
+      document.removeEventListener('focusin', onFocusIn);
+    };
+  }, []);
+
   return (
     <div
       className="fixed inset-0 z-[100] bg-warm-900/70 backdrop-blur-sm flex items-center justify-center p-4"

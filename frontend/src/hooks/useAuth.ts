@@ -10,7 +10,15 @@ export function useAuth() {
 
   const { data: authState, isLoading } = useQuery<AuthState>({
     queryKey: ['auth'],
-    queryFn: authApi.getMe,
+    queryFn: async () => {
+      const state = await authApi.getMe();
+      // A failed refetch must not erase the last confirmed auth state.
+      if (state.unavailable) {
+        const previous = queryClient.getQueryData<AuthState>(['auth']);
+        if (previous && !previous.unavailable) return previous;
+      }
+      return state;
+    },
     staleTime: 1000 * 60 * 5, // 5 minutes
     retry: false
   });
@@ -53,6 +61,8 @@ export function useAuth() {
     user: authState?.user || null,
     isAuthenticated: authState?.authenticated || false,
     isLoading,
+    // The auth check failed and there is no earlier confirmed state.
+    authUnavailable: authState?.unavailable === true,
     login,
     logout
   };
