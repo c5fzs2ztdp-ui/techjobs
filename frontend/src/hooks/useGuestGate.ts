@@ -10,6 +10,16 @@ import { useAuth } from '@/hooks/useAuth';
 export const GUEST_JOB_LIMIT = 10;
 export const GUEST_TIME_LIMIT_MS = 30_000;
 export const GUEST_GATE_START_KEY = 'guest_gate_first_visit_at';
+// Set when the guest closes the login prompt: it stays closed for this
+// browser tab session (sessionStorage) and may return on a later visit.
+export const GUEST_GATE_DISMISSED_KEY = 'guest_gate_dismissed';
+
+export function readGateDismissed(): boolean {
+  try { return window.sessionStorage.getItem(GUEST_GATE_DISMISSED_KEY) === '1'; } catch { return false; }
+}
+export function writeGateDismissed(): void {
+  try { window.sessionStorage.setItem(GUEST_GATE_DISMISSED_KEY, '1'); } catch { /* in-memory only */ }
+}
 
 // Crawlers must keep full access: gating indexable content would hurt SEO.
 const CRAWLER_UA =
