@@ -10,6 +10,12 @@ ARG VITE_ADSENSE_CLIENT_ID
 ARG VITE_ADSENSE_SLOT_BANNER
 ARG VITE_JOBS_DATA_URL
 ARG VITE_SUBMIT_COMPANY_URL
+# Optional read-only deploy key for the private logo assets repo (see
+# frontend/scripts/pull_logos.mjs). Empty/unset: build keeps letter avatars.
+ARG LOGOS_DEPLOY_KEY
+
+# git + ssh are needed by the optional logo pull
+RUN apk add --no-cache git openssh-client
 
 WORKDIR /app/frontend
 COPY frontend/package*.json ./
@@ -24,7 +30,7 @@ ENV VITE_ADSENSE_SLOT_BANNER=$VITE_ADSENSE_SLOT_BANNER
 ENV VITE_JOBS_DATA_URL=$VITE_JOBS_DATA_URL
 ENV VITE_SUBMIT_COMPANY_URL=$VITE_SUBMIT_COMPANY_URL
 
-RUN npm run build
+RUN LOGOS_DEPLOY_KEY="$LOGOS_DEPLOY_KEY" npm run build
 
 # ============ Build Backend ============
 FROM node:20-alpine AS backend-builder
