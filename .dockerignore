@@ -45,3 +45,6 @@ LICENSE
 # Development files
 podman-compose*.yml
 Makefile
+
+# Render copies secret files into the build context root
+logos_deploy_key
