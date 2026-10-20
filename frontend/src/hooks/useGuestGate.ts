@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useAuth } from '@/hooks/useAuth';
 
 // Guest gate: unauthenticated visitors see a limited slice of the board and
@@ -10,6 +10,17 @@ import { useAuth } from '@/hooks/useAuth';
 export const GUEST_JOB_LIMIT = 10;
 export const GUEST_TIME_LIMIT_MS = 30_000;
 export const GUEST_GATE_START_KEY = 'guest_gate_first_visit_at';
+// Set when the guest closes the login prompt: it stays closed for this
+// browser tab session (sessionStorage) and may return on a later visit.
+// Closing never lifts the job limit.
+export const GUEST_GATE_DISMISSED_KEY = 'guest_gate_dismissed';
+
+function readDismissed(): boolean {
+  try { return window.sessionStorage.getItem(GUEST_GATE_DISMISSED_KEY) === '1'; } catch { return false; }
+}
+function writeDismissed(): void {
+  try { window.sessionStorage.setItem(GUEST_GATE_DISMISSED_KEY, '1'); } catch { /* in-memory only */ }
+}
 
 // Crawlers must keep full access: gating indexable content would hurt SEO.
 const CRAWLER_UA =
@@ -50,7 +61,9 @@ function readGateStart(storage: Storage | null, now: number): number {
 export interface GuestGateState {
   isGuest: boolean;        // unauthenticated, non-crawler visitor
   listLimited: boolean;    // job list should be cut to GUEST_JOB_LIMIT
-  timeUp: boolean;         // grace period over: show the blocking login modal
+  timeUp: boolean;         // grace period over
+  showModal: boolean;      // timeUp and the guest has not closed the prompt
+  dismiss: () => void;     // close the prompt and keep browsing as a guest
   secondsLeft: number;
 }
 
@@ -70,6 +83,11 @@ export function useGuestGate(timerActive = true): GuestGateState {
   const authUnknown = (isLoading || authUnavailable === true) && !isAuthenticated && !crawler;
 
   const [now, setNow] = useState(() => Date.now());
+  const [dismissed, setDismissed] = useState(readDismissed);
+  const dismiss = useCallback(() => {
+    writeDismissed();
+    setDismissed(true);
+  }, []);
 
   // Anchored once the guest actually sees jobs; persists across reloads.
   /* eslint-disable react-hooks/purity -- intentional one-time side effect:
@@ -87,7 +105,7 @@ export function useGuestGate(timerActive = true): GuestGateState {
   }, [isGuest, timerActive]);
 
   if (!isGuest) {
-    return { isGuest: false, listLimited: authUnknown, timeUp: false, secondsLeft: 0 };
+    return { isGuest: false, listLimited: authUnknown, timeUp: false, showModal: false, dismiss, secondsLeft: 0 };
   }
   const anchor = start ?? now;
   const remaining = Math.max(0, GUEST_TIME_LIMIT_MS - (now - anchor));
@@ -95,6 +113,8 @@ export function useGuestGate(timerActive = true): GuestGateState {
     isGuest: true,
     listLimited: true,
     timeUp: remaining === 0,
+    showModal: remaining === 0 && !dismissed,
+    dismiss,
     secondsLeft: Math.ceil(remaining / 1000),
   };
 }

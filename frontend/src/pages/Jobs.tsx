@@ -337,7 +337,7 @@ export default function Jobs() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-warm-50 to-iris-50/30">
-      {guestGate.timeUp && <GuestGateModal />}
+      {guestGate.showModal && <GuestGateModal onClose={guestGate.dismiss} />}
       {/* Hero Section */}
       <div className="bg-gradient-to-r from-iris-700 via-iris-800 to-iris-900 text-white">
         <div className="max-w-7xl mx-auto px-4 py-8 md:py-16">

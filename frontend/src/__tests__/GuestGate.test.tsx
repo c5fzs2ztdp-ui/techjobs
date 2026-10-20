@@ -5,7 +5,7 @@ import { MemoryRouter } from 'react-router-dom';
 import Jobs from '@/pages/Jobs';
 import CompanyProfile from '@/pages/CompanyProfile';
 import GuestGateModal from '@/components/GuestGateModal';
-import { GUEST_GATE_START_KEY, GUEST_JOB_LIMIT, isCrawler } from '@/hooks/useGuestGate';
+import { GUEST_GATE_DISMISSED_KEY, GUEST_GATE_START_KEY, GUEST_JOB_LIMIT, isCrawler } from '@/hooks/useGuestGate';
 
 function makeJobs(n: number, company?: string) {
   return Array.from({ length: n }, (_, i) => ({
@@ -52,7 +52,7 @@ beforeAll(() => {
   (Element.prototype as unknown as { scrollTo: () => void }).scrollTo = () => {};
 });
 
-beforeEach(() => { window.localStorage.clear(); });
+beforeEach(() => { window.localStorage.clear(); window.sessionStorage.clear(); });
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); vi.restoreAllMocks(); });
 
 describe('isCrawler', () => {
@@ -188,13 +188,42 @@ describe('guest gate hardening', () => {
   });
 });
 
+describe('guest gate dismissal', () => {
+  it('lets the guest close the modal and keep browsing with the 10-job limit intact', async () => {
+    window.localStorage.setItem(GUEST_GATE_START_KEY, String(Date.now() - 31_000));
+    mockFetch(15, false);
+    renderJobs();
+    await waitFor(() => expect(screen.getByRole('dialog')).toBeTruthy());
+    fireEvent.click(screen.getByRole('button', { name: /close and continue as a guest/i }));
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+    expect(screen.getByText('Engineer 9')).toBeTruthy();
+    expect(screen.queryByText('Engineer 10')).toBeNull();
+    expect(screen.getByText(/more jobs are locked for guests/)).toBeTruthy();
+    expect(window.sessionStorage.getItem(GUEST_GATE_DISMISSED_KEY)).toBe('1');
+  });
+
+  it('closes on Escape and stays closed when the page is opened again in the same session', async () => {
+    window.localStorage.setItem(GUEST_GATE_START_KEY, String(Date.now() - 31_000));
+    mockFetch(15, false);
+    const first = renderJobs();
+    await waitFor(() => expect(screen.getByRole('dialog')).toBeTruthy());
+    fireEvent.keyDown(document.body, { key: 'Escape' });
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+    first.unmount();
+    renderJobs();
+    await waitFor(() => expect(screen.getByText('Engineer 0')).toBeTruthy());
+    expect(screen.queryByRole('dialog')).toBeNull();
+  });
+});
+
 describe('GuestGateModal keyboard handling', () => {
+  const onClose = vi.fn();
   function renderModal() {
     const client = new QueryClient();
     return render(
       <QueryClientProvider client={client}>
         <button type="button">background</button>
-        <GuestGateModal />
+        <GuestGateModal onClose={onClose} />
       </QueryClientProvider>
     );
   }
@@ -206,6 +235,7 @@ describe('GuestGateModal keyboard handling', () => {
     fireEvent.keyDown(screen.getByRole('button', { name: 'Log in with Google' }), { key: 'Escape' });
     document.removeEventListener('keydown', underlying);
     expect(underlying).not.toHaveBeenCalled();
+    expect(onClose).toHaveBeenCalled();
   });
 
   it('pulls focus back into the dialog when it lands on the background', () => {

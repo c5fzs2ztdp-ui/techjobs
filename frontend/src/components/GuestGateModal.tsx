@@ -1,13 +1,13 @@
 import { useEffect, useRef } from 'react';
-import { Lock, LogIn } from 'lucide-react';
+import { Lock, LogIn, X } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
 import { useFocusTrap } from '@/hooks/useDialogAccessibility';
 import { GUEST_JOB_LIMIT } from '@/hooks/useGuestGate';
 
-// Blocking login prompt shown to guests when the grace period ends.
-// Intentionally NOT dismissable: no backdrop click, no Escape - the whole
-// point is that continuing requires an account. Focus is trapped inside.
-export default function GuestGateModal() {
+// Login prompt shown to guests when the grace period ends. The guest can
+// close it (X button or Escape) and keep browsing as a guest: the job limit
+// stays, only the prompt goes away. Focus is trapped while it is open.
+export default function GuestGateModal({ onClose }: { onClose: () => void }) {
   const { login } = useAuth();
   const dialogRef = useRef<HTMLDivElement>(null);
   const loginButtonRef = useRef<HTMLButtonElement>(null);
@@ -23,14 +23,16 @@ export default function GuestGateModal() {
     };
   }, []);
 
-  // Keep the gate in charge of the keyboard: swallow Escape before any
-  // dialog underneath (e.g. the mobile filter panel) sees it, and pull focus
+  // Keep the gate in charge of the keyboard: Escape closes the gate and is
+  // swallowed before any dialog underneath (e.g. the mobile filter panel)
+  // sees it, and pull focus
   // back if it ever lands outside the dialog.
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
         e.preventDefault();
         e.stopPropagation();
+        onClose();
       }
     };
     const onFocusIn = (e: FocusEvent) => {
@@ -45,7 +47,7 @@ export default function GuestGateModal() {
       window.removeEventListener('keydown', onKeyDown, true);
       document.removeEventListener('focusin', onFocusIn);
     };
-  }, []);
+  }, [onClose]);
 
   return (
     <div
@@ -58,8 +60,16 @@ export default function GuestGateModal() {
         aria-modal="true"
         aria-labelledby="guest-gate-title"
         aria-describedby="guest-gate-desc"
-        className="bg-white rounded-2xl shadow-xl max-w-md w-full max-h-[calc(100vh-2rem)] overflow-y-auto p-8 text-center space-y-5"
+        className="bg-white rounded-2xl shadow-xl max-w-md w-full relative max-h-[calc(100vh-2rem)] overflow-y-auto p-8 text-center space-y-5"
       >
+        <button
+          type="button"
+          onClick={onClose}
+          aria-label="Close and continue as a guest"
+          className="absolute top-3 right-3 rounded-full p-1.5 text-warm-500 hover:bg-warm-100 hover:text-warm-800 focus:outline-none focus-visible:ring-2 focus-visible:ring-iris-500"
+        >
+          <X className="w-5 h-5" aria-hidden="true" />
+        </button>
         <div className="mx-auto w-14 h-14 rounded-full bg-iris-100 flex items-center justify-center">
           <Lock className="w-7 h-7 text-iris-600" aria-hidden="true" />
         </div>

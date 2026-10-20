@@ -131,7 +131,7 @@ export default function CompanyProfile() {
 
   return (
     <div className="min-h-screen bg-warm-50">
-      {guestGate.timeUp && <GuestGateModal />}
+      {guestGate.showModal && <GuestGateModal onClose={guestGate.dismiss} />}
       {/* Header */}
       <div className="bg-white border-b border-warm-200">
         <div className="max-w-5xl mx-auto px-4 py-8">
