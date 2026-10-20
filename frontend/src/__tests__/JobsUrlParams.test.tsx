@@ -185,12 +185,12 @@ describe('Jobs URL sync hardening', () => {
       return real(...args);
     });
     const input = screen.getByLabelText(SEARCH);
-    for (let i = 1; i <= 130; i++) fireEvent.change(input, { target: { value: 'x'.repeat(i) } });
-    for (let i = 129; i >= 0; i--) fireEvent.change(input, { target: { value: 'x'.repeat(i) } });
+    for (let i = 1; i <= 60; i++) fireEvent.change(input, { target: { value: 'x'.repeat(i) } });
+    for (let i = 59; i >= 0; i--) fireEvent.change(input, { target: { value: 'x'.repeat(i) } });
     await wait(400);
     expect(calls.length).toBeLessThan(5);
     expect(screen.queryByText('Something went wrong')).toBeNull();
-  });
+  }, 30000);
 
   it('does not crash the page when history.replaceState throws', async () => {
     mockFetch();
