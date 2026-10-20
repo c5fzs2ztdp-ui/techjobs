@@ -1,6 +1,11 @@
-import { describe, it, expect, afterEach } from 'vitest';
+import { describe, it, expect, afterEach, vi } from 'vitest';
 import { render, screen, fireEvent, cleanup } from '@testing-library/react';
 import CompanyLogo from '@/components/CompanyLogo';
+
+// Populated manifest so the main path (manifest entry -> <img>) is covered.
+vi.mock('../generated/companyLogos.json', () => ({
+  default: { '__ManifestTestCo': 'manifest-test-co.png' },
+}));
 
 afterEach(cleanup);
 
@@ -11,13 +16,11 @@ describe('CompanyLogo', () => {
     expect(avatar.textContent).toBe('N');
   });
 
-  it('renders an <img> when a logo file exists in the manifest', () => {
-    render(<CompanyLogo name="__ManifestTestCo" logoUrl={undefined} />);
-    // __ManifestTestCo is injected into the real manifest by the test setup below
-    const img = screen.queryByAltText('__ManifestTestCo logo');
-    // manifest is static; if the company is absent we expect the letter avatar
-    expect(img).toBeNull();
-    expect(screen.getByRole('img', { name: '__ManifestTestCo logo' }).textContent).toBe('_');
+  it('renders an <img> from the manifest entry when a logo file exists', () => {
+    render(<CompanyLogo name="__ManifestTestCo" />);
+    const img = screen.getByAltText('__ManifestTestCo logo') as HTMLImageElement;
+    expect(img.tagName).toBe('IMG');
+    expect(img.getAttribute('src')).toBe('/logos/manifest-test-co.png');
   });
 
   it('falls back to the letter avatar when the image fails to load', () => {
