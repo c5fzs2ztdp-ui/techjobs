@@ -51,32 +51,48 @@ beforeEach(() => {
 });
 afterEach(() => rmSync(work, { recursive: true, force: true }));
 
+const OK_SRC = '{"A":{"source_url":"https://x.example/a.png","page":"https://x.example/p"}}';
+
 describe('pull_logos.mjs', () => {
   it('installs a valid pull and replaces the previous assets', () => {
-    const r = run(makeFixture('{"A":"a.png"}', '{"A":{"source_url":"https://x.example/a.png","page":"https://x.example/p"}}'));
+    const r = run(makeFixture('{"A":"a.png"}', OK_SRC));
     expect(r.status).toBe(0);
     expect(logos()).toEqual(['a.png', 'logo-sources.json']);
     expect(manifest()).toBe('{"A":"a.png"}');
   });
 
-  it('accepts a pull without logo-sources.json', () => {
-    const r = run(makeFixture('{"A":"a.png"}'));
+  it('accepts string sources and explicit unrecorded markers', () => {
+    const src = JSON.stringify({
+      A: 'https://x.example/a.png',
+      B: { provenance: 'own-domain-unrecorded', own_domain: 'b.example.com' },
+      C: { provenance: 'unrecorded' },
+      D: { provenance: 'own-domain', source_url: 'https://d.example/favicon.ico', own_domain: 'd.example' },
+    });
+    const r = run(makeFixture('{"A":"a.png","B":"a.png","C":"a.png","D":"a.png"}', src));
     expect(r.status).toBe(0);
-    expect(logos()).toEqual(['a.png']);
+    expect(logos()).toEqual(['a.png', 'logo-sources.json']);
   });
 
   it.each([
     ['malformed manifest JSON', '{not json', undefined],
-    ['manifest pointing at a missing file', '{"A":"zz.png"}', undefined],
-    ['manifest with a path traversal filename', '{"A":"../x.png"}', undefined],
+    ['manifest pointing at a missing file', '{"A":"zz.png"}', OK_SRC],
+    ['manifest with a path traversal filename', '{"A":"../x.png"}', OK_SRC],
+    ['missing logo-sources.json', '{"A":"a.png"}', undefined],
+    ['sources without a record for every logo', '{"A":"a.png","B":"a.png"}', OK_SRC],
     ['sources entry without a valid URL', '{"A":"a.png"}', '{"A":"not a url"}'],
     ['sources entry with a non-http(s) URL', '{"A":"a.png"}', '{"A":"javascript:alert(1)"}'],
-    ['sources entry for a company not in the manifest', '{"A":"a.png"}', '{"Zed":"https://x.example/z.png"}'],
+    ['sources entry for a company not in the manifest', '{"A":"a.png"}', '{"A":"https://x.example/a.png","Zed":"https://x.example/z.png"}'],
     ['sources entry with an invalid page URL', '{"A":"a.png"}', '{"A":{"source_url":"https://x.example/a.png","page":"ftp://x"}}'],
+    ['own-domain record without a source URL', '{"A":"a.png"}', '{"A":{"provenance":"own-domain","own_domain":"x.example.com"}}'],
+    ['own-domain-unrecorded record without a domain', '{"A":"a.png"}', '{"A":{"provenance":"own-domain-unrecorded"}}'],
+    ['record with an invalid own_domain', '{"A":"a.png"}', '{"A":{"provenance":"own-domain-unrecorded","own_domain":"not a host"}}'],
+    ['record with an unknown provenance', '{"A":"a.png"}', '{"A":{"provenance":"trust-me"}}'],
+    ['record that is neither a URL nor a provenance marker', '{"A":"a.png"}', '{"A":{}}'],
     ['malformed sources JSON', '{"A":"a.png"}', '{oops'],
   ])('keeps the previous logos and manifest on %s', (_name, m, s) => {
     const r = run(makeFixture(m, s));
     expect(r.status).toBe(0);
+    expect(r.stderr + r.stdout).toContain('WARNING');
     expect(logos()).toEqual(['old.png']);
     expect(manifest()).toBe('{"Old":"old.png"}');
     expect(existsSync(path.join(app, 'public', 'logos.staging'))).toBe(false);
@@ -84,13 +100,13 @@ describe('pull_logos.mjs', () => {
   });
 
   it('falls back after the clone deadline instead of blocking the build', () => {
-    const r = run(makeFixture('{"A":"a.png"}'), { STALL: '1', LOGOS_PULL_TIMEOUT_MS: '1000' });
+    const r = run(makeFixture('{"A":"a.png"}', OK_SRC), { STALL: '1', LOGOS_PULL_TIMEOUT_MS: '1000' });
     expect(r.status).toBe(0);
     expect(logos()).toEqual(['old.png']);
   });
 
   it('skips the pull entirely without a deploy key', () => {
-    const r = run(makeFixture('{"A":"a.png"}'), { LOGOS_DEPLOY_KEY: '' });
+    const r = run(makeFixture('{"A":"a.png"}', OK_SRC), { LOGOS_DEPLOY_KEY: '' });
     expect(r.status).toBe(0);
     expect(logos()).toEqual(['old.png']);
   });

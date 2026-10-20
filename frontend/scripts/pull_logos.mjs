@@ -11,7 +11,7 @@
 // This script NEVER fails the build:
 // - No LOGOS_DEPLOY_KEY set (CI, forks, contributors): the committed
 //   placeholder manifest stays and every company renders its letter avatar.
-// - Key set but the clone, validation (manifest and optional logo-sources.json) or install fails for any reason: warn
+// - Key set but the clone, validation (manifest and the required, complete logo-sources.json) or install fails for any reason: warn
 //   and continue with whatever is already in the tree. Existing logos and
 //   the existing manifest are only replaced after the new set is fully
 //   staged and validated.
@@ -86,14 +86,26 @@ function isHttpUrl(value) {
   }
 }
 
-// Optional provenance map (logo-sources.json, shipped in the private assets
-// repo next to the logos): company name -> source URL, or an object with a
-// source_url and optional page URL. When present, every entry must have a
-// valid http(s) URL and refer to a company in the manifest. The map is not
-// required to cover every logo; it only has to be well-formed and consistent.
+const PROVENANCE = new Set(['own-domain', 'own-domain-unrecorded', 'unrecorded']);
+const HOSTNAME = /^(?=.{1,253}$)([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}$/i;
+
+// Required provenance map (logo-sources.json, shipped in the private assets
+// repo next to the logos): one record for every logo in the manifest, and no
+// record for a company that has no logo. A record is one of:
+//   - a source URL string, or an object with an http(s) source_url (plus an
+//     optional page URL and own_domain / provenance fields): the URL the
+//     logo was fetched from;
+//   - { provenance: 'own-domain-unrecorded', own_domain }: the company's own
+//     domain is known but the exact file URL was not recorded;
+//   - { provenance: 'unrecorded' }: the logo predates provenance tracking.
+// The unrecorded forms are explicit markers, never an invented source. A
+// missing, malformed or incomplete map rejects the whole pull so the previous
+// assets stay in place. Nothing from the map is committed to this repository.
 function validateSources(logosDir, manifest) {
   const file = path.join(logosDir, 'logo-sources.json');
-  if (!existsSync(file)) return 0;
+  if (!existsSync(file)) {
+    throw new Error('logo-sources.json is missing (a source record is required for every logo)');
+  }
   let parsed;
   try {
     parsed = JSON.parse(readFileSync(file, 'utf8'));
@@ -103,17 +115,39 @@ function validateSources(logosDir, manifest) {
   if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) {
     throw new Error('logo-sources.json is not a company -> source object');
   }
+  const has = (o, k) => Object.prototype.hasOwnProperty.call(o, k);
   for (const [name, entry] of Object.entries(parsed)) {
-    if (!Object.prototype.hasOwnProperty.call(manifest, name)) {
+    if (!has(manifest, name)) {
       throw new Error(`logo-sources.json entry "${name}" is not a company in the manifest`);
     }
-    const sourceUrl = typeof entry === 'string' ? entry : entry && typeof entry === 'object' ? entry.source_url : undefined;
-    if (!isHttpUrl(sourceUrl)) {
-      throw new Error(`logo-sources.json entry "${name}" has no valid http(s) source URL`);
+    if (typeof entry === 'string') {
+      if (!isHttpUrl(entry)) throw new Error(`logo-sources.json entry "${name}" has no valid http(s) source URL`);
+      continue;
     }
-    if (entry && typeof entry === 'object' && entry.page !== undefined && !isHttpUrl(entry.page)) {
+    if (entry === null || typeof entry !== 'object' || Array.isArray(entry)) {
+      throw new Error(`logo-sources.json entry "${name}" is not a URL or record`);
+    }
+    if (entry.provenance !== undefined && !PROVENANCE.has(entry.provenance)) {
+      throw new Error(`logo-sources.json entry "${name}" has an unknown provenance`);
+    }
+    if (entry.own_domain !== undefined && !(typeof entry.own_domain === 'string' && HOSTNAME.test(entry.own_domain))) {
+      throw new Error(`logo-sources.json entry "${name}" has an invalid own_domain`);
+    }
+    if (entry.page !== undefined && !isHttpUrl(entry.page)) {
       throw new Error(`logo-sources.json entry "${name}" has an invalid page URL`);
     }
+    if (entry.source_url !== undefined || entry.provenance === undefined || entry.provenance === 'own-domain') {
+      if (!isHttpUrl(entry.source_url)) {
+        throw new Error(`logo-sources.json entry "${name}" has no valid http(s) source URL`);
+      }
+    } else if (entry.provenance === 'own-domain-unrecorded' && entry.own_domain === undefined) {
+      throw new Error(`logo-sources.json entry "${name}" is own-domain-unrecorded without an own_domain`);
+    }
+  }
+  const missing = Object.keys(manifest).filter((c) => !has(parsed, c));
+  if (missing.length) {
+    const sample = missing.slice(0, 3).join(', ');
+    throw new Error(`logo-sources.json has no record for ${missing.length} logo(s) (e.g. ${sample})`);
   }
   return Object.keys(parsed).length;
 }
