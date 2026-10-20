@@ -74,5 +74,7 @@ export function downloadJobsCsv(jobs: Job[], date: Date = new Date()): void {
   document.body.appendChild(a);
   a.click();
   a.remove();
-  URL.revokeObjectURL(url);
+  // Revoke on the next task: revoking synchronously right after click() can
+  // cancel the download in Firefox and iOS Safari.
+  setTimeout(() => URL.revokeObjectURL(url), 0);
 }
