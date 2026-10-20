@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useCallback } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { usePostHog } from 'posthog-js/react';
 import { Button } from "@/components/ui/button";
@@ -15,7 +15,7 @@ import JobsLoader from "@/components/jobs/JobsLoader";
 import { CATEGORY_LABELS, displayCity, fetchJobsPayload, isClosed, JOBS_PAYLOAD_QUERY_KEY, selectCityLabels, selectSortedJobs, type Job } from "@/components/jobs/jobsData";
 import { savedJobsApi } from "@/api/storage";
 import GuestGateModal from "@/components/GuestGateModal";
-import { GUEST_JOB_LIMIT, useGuestGate } from "@/hooks/useGuestGate";
+import { GUEST_JOB_LIMIT, readGateDismissed, useGuestGate, writeGateDismissed } from "@/hooks/useGuestGate";
 import { Lock } from "lucide-react";
 
 // Types for mutation results
@@ -253,6 +253,11 @@ export default function Jobs() {
   // The grace-period clock starts only once jobs are actually on screen.
   const [jobsShown, setJobsShown] = useState(false);
   const guestGate = useGuestGate(jobsShown);
+  const [gateDismissed, setGateDismissed] = useState(readGateDismissed);
+  const dismissGate = useCallback(() => {
+    writeGateDismissed();
+    setGateDismissed(true);
+  }, []);
   const gatedJobs = guestGate.listLimited
     ? filteredJobs.slice(0, GUEST_JOB_LIMIT)
     : filteredJobs;
@@ -337,7 +342,7 @@ export default function Jobs() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-warm-50 to-iris-50/30">
-      {guestGate.timeUp && <GuestGateModal />}
+      {guestGate.timeUp && !gateDismissed && <GuestGateModal onClose={dismissGate} />}
       {/* Hero Section */}
       <div className="bg-gradient-to-r from-iris-700 via-iris-800 to-iris-900 text-white">
         <div className="max-w-7xl mx-auto px-4 py-8 md:py-16">
