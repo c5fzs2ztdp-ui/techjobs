@@ -25,6 +25,13 @@ function csvCell(value: string | null | undefined): string {
   return /[",\r\n]/.test(v) ? `"${v.replace(/"/g, '""')}"` : v;
 }
 
+/** Region cell: all derived regions (what the region filter matches on),
+ *  joined with "; ". Falls back to the optional upstream scalar `region`. */
+function regionCell(job: Job): string | null {
+  const derived = Array.isArray(job.regions) ? job.regions.filter(Boolean) : [];
+  return derived.length > 0 ? derived.join("; ") : job.region;
+}
+
 function categoryLabel(slug: string): string {
   return Object.prototype.hasOwnProperty.call(CATEGORY_LABELS, slug)
     ? CATEGORY_LABELS[slug]
@@ -41,7 +48,7 @@ export function jobsToCsv(jobs: Job[]): string {
         job.title,
         job.company,
         job.cityHe ?? job.city,
-        job.region,
+        regionCell(job),
         categoryLabel(job.job_category),
         job.workModel,
         job.employmentType,

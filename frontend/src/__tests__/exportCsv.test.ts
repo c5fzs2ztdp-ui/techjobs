@@ -14,6 +14,21 @@ function job(overrides: Partial<Job>): Job {
 }
 
 describe('jobsToCsv', () => {
+  it('exports derived regions when the upstream scalar region is missing', () => {
+    const csv = jobsToCsv([job({ region: null, regions: ['sharon'] })]);
+    expect(csv.slice(1).split('\r\n')[1].split(',')[3]).toBe('sharon');
+  });
+
+  it('exports every derived region for multi-region jobs, joined with "; "', () => {
+    const csv = jobsToCsv([job({ region: 'tel-aviv-gush-dan', regions: ['tel-aviv-gush-dan', 'haifa'] })]);
+    expect(csv.slice(1).split('\r\n')[1].split(',')[3]).toBe('tel-aviv-gush-dan; haifa');
+  });
+
+  it('falls back to the scalar region when no regions are derived', () => {
+    const csv = jobsToCsv([job({ region: 'north', regions: [] })]);
+    expect(csv.slice(1).split('\r\n')[1].split(',')[3]).toBe('north');
+  });
+
   it('emits a header row and one row per job, CRLF-terminated, with a UTF-8 BOM', () => {
     const csv = jobsToCsv([job({}), job({ title: 'QA' })]);
     expect(csv.charCodeAt(0)).toBe(0xfeff);
