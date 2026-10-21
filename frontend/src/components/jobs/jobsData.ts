@@ -245,15 +245,30 @@ export function selectCityLabels(payload: JobsPayload): Record<string, string> {
   return payload.cityLabels || {};
 }
 
+/** Honest "how new is this job" signal: the employer's postedAt when the
+ *  source provides it (rare today), otherwise the firstSeenAt our pipeline
+ *  stamped when the job first appeared in the feed. `updated` is deliberately
+ *  NOT used here - it also bumps on re-verification, so a touched old job
+ *  would masquerade as new. Missing or unparsable dates count as 0, so
+ *  undated jobs sink to the end of the list. */
+function newnessTime(job: Job): number {
+  const raw = job.postedAt || job.firstSeenAt;
+  const t = raw ? new Date(raw).getTime() : 0;
+  return Number.isNaN(t) ? 0 : t;
+}
+
 export function sortJobs(jobs: Job[]): Job[] {
-  // English-titled jobs first, then Hebrew-titled; newest first within each
-  // group, undated jobs last inside their group. Copies before sorting - the
-  // cached payload is shared across pages and must not be mutated.
+  // Newest jobs first (postedAt || firstSeenAt), undated jobs last. Ties
+  // break English-titled before Hebrew-titled, then by `updated` - the
+  // previous primary ordering. Copies before sorting - the cached payload is
+  // shared across pages and must not be mutated.
   const langGroup = (title: string | null): number => {
     const m = (title || '').match(/[A-Za-zא-ת]/);
     return m && /[א-ת]/.test(m[0]) ? 1 : 0;
   };
   return [...jobs].sort((a, b) => {
+    const n = newnessTime(b) - newnessTime(a);
+    if (n !== 0) return n;
     const g = langGroup(a.title) - langGroup(b.title);
     if (g !== 0) return g;
     const ta = a.updated ? new Date(a.updated).getTime() : 0;
