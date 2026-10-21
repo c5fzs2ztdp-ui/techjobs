@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { fetchJobsPayload, fetchAllJobs, isClosed, isNewToday, type Job } from '@/components/jobs/jobsData';
+import { fetchJobsPayload, fetchAllJobs, isClosed, isNewToday, sortJobs, type Job } from '@/components/jobs/jobsData';
 
 const payloadResponse = (body: unknown) =>
   ({ ok: true, json: async () => body } as Response);
@@ -192,5 +192,65 @@ describe('adversarial payload hardening', () => {
     expect(payload.jobs).toHaveLength(2);
     expect(({} as Record<string, unknown>).polluted).toBeUndefined();
     expect(payload.jobs[1].title).toHaveLength(200_000);
+  });
+});
+
+describe('sortJobs', () => {
+  const job = (over: Partial<Job>): Job => ({
+    company: 'Co', title: 'Engineer', location: null, url: 'https://x/1',
+    city: null, department: null, description: null, employmentType: null,
+    workModel: null, seniority: null, technologies: [], postedAt: null,
+    firstSeenAt: null, closedAt: null, refreshState: 'fresh', region: null,
+    cities: [], regions: [], cityHe: null, job_category: 'software',
+    updated: null, ...over,
+  });
+
+  it('orders newest first by postedAt || firstSeenAt, undated last', () => {
+    const sorted = sortJobs([
+      job({ title: 'undated' }),
+      job({ title: 'seen-only', firstSeenAt: '2026-10-18T08:00:00Z' }),
+      job({ title: 'posted', postedAt: '2026-10-20T08:00:00Z', firstSeenAt: '2026-10-21T08:00:00Z' }),
+      job({ title: 'older-post', postedAt: '2026-10-19T08:00:00Z', firstSeenAt: '2026-10-21T09:00:00Z' }),
+    ]);
+    expect(sorted.map(j => j.title)).toEqual(['posted', 'older-post', 'seen-only', 'undated']);
+  });
+
+  it('postedAt wins over a later firstSeenAt (employer date is the honest newness)', () => {
+    const sorted = sortJobs([
+      job({ title: 'new-scrape-old-post', postedAt: '2026-09-01T00:00:00Z', firstSeenAt: '2026-10-21T00:00:00Z' }),
+      job({ title: 'fresh-post', postedAt: '2026-10-20T00:00:00Z' }),
+    ]);
+    expect(sorted.map(j => j.title)).toEqual(['fresh-post', 'new-scrape-old-post']);
+  });
+
+  it('does not let a re-verification (`updated`) bump an old job above a newer one', () => {
+    const sorted = sortJobs([
+      job({ title: 'reverified', firstSeenAt: '2026-10-01T00:00:00Z', updated: '2026-10-21T00:00:00Z' }),
+      job({ title: 'genuinely-new', firstSeenAt: '2026-10-20T00:00:00Z', updated: '2026-10-20T00:00:00Z' }),
+    ]);
+    expect(sorted.map(j => j.title)).toEqual(['genuinely-new', 'reverified']);
+  });
+
+  it('treats unparsable dates as undated', () => {
+    const sorted = sortJobs([
+      job({ title: 'bad-date', firstSeenAt: 'not-a-date' }),
+      job({ title: 'dated', firstSeenAt: '2026-10-20T00:00:00Z' }),
+    ]);
+    expect(sorted.map(j => j.title)).toEqual(['dated', 'bad-date']);
+  });
+
+  it('keeps English-before-Hebrew and `updated` as tie-breakers for equal newness', () => {
+    const sorted = sortJobs([
+      job({ title: 'מהנדס', firstSeenAt: '2026-10-20T00:00:00Z', updated: '2026-10-20T00:00:00Z' }),
+      job({ title: 'Engineer', firstSeenAt: '2026-10-20T00:00:00Z', updated: '2026-10-19T00:00:00Z' }),
+    ]);
+    expect(sorted.map(j => j.title)).toEqual(['Engineer', 'מהנדס']);
+  });
+
+  it('does not mutate the input array', () => {
+    const input = [job({ title: 'b', firstSeenAt: '2026-10-18T00:00:00Z' }), job({ title: 'a', firstSeenAt: '2026-10-20T00:00:00Z' })];
+    const before = input.map(j => j.title);
+    sortJobs(input);
+    expect(input.map(j => j.title)).toEqual(before);
   });
 });
